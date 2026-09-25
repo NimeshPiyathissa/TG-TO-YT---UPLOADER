@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Login — TG→YT Uploader{% endblock %}
+{% block guest_content %}
+<div class="login-wrap">
+  <form method="post" action="/login" class="login-card">
+    <span class="eyebrow">Control room</span>
+    <h1>🎬 TG→YT Uploader</h1>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Username
+      <input type="text" name="username" value="{{ username or '' }}" autofocus required>
+    </label>
+    <label>Password
+      <input type="password" name="password" required>
+    </label>
+    {% if needs_totp %}
+    <label>Authentication code
+      <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required autofocus>
+    </label>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">Log in</button>
+  </form>
+</div>
+{% endblock %}

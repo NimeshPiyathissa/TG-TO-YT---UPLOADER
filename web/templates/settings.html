@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Settings — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<div class="panel">
+  <h2>Compliance audit</h2>
+  <p>Currently: <strong>{{ "audited (uploads can go public)" if audited else "not audited (uploads forced Private)" }}</strong></p>
+  <form method="post" action="/settings/project-audited" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="value" value="{{ "false" if audited else "true" }}">
+    <button type="submit" class="btn">{{ "Mark as not audited" if audited else "Mark as audited" }}</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Defaults</h2>
+  <form method="post" action="/settings/defaults">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Default privacy
+      <select name="default_privacy">
+        {% for p in ("private", "unlisted", "public") %}
+        <option value="{{ p }}" {{ "selected" if db_settings.get("default_privacy") == p else "" }}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Default category ID
+      <input type="text" name="default_category_id" value="{{ db_settings.get("default_category_id", "") }}">
+    </label>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Limits</h2>
+  <form method="post" action="/settings/limits">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Max concurrent downloads
+      <input type="number" name="max_concurrent_downloads" value="{{ db_settings.get("max_concurrent_downloads", 2) }}" min="1">
+    </label>
+    <label>Max concurrent uploads
+      <input type="number" name="max_concurrent_uploads" value="{{ db_settings.get("max_concurrent_uploads", 1) }}" min="1">
+    </label>
+    <label>Upload chunk size (bytes, multiple of 262144)
+      <input type="number" name="upload_chunk_bytes" value="{{ db_settings.get("upload_chunk_bytes", 8388608) }}" step="262144">
+    </label>
+    <label>Job retention (hours)
+      <input type="number" name="job_retention_hours" value="{{ db_settings.get("job_retention_hours", 24) }}" min="1">
+    </label>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+  <p class="card-sub">Saved values apply after the next service restart.</p>
+</div>
+
+<div class="panel">
+  <h2>Quota today</h2>
+  <ul>
+    {% for bucket, limit in bucket_limits.items() %}
+    <li>{{ bucket }}: {{ quota_summary.get(bucket, 0) }} / {{ limit }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="panel">
+  <h2>Service</h2>
+  <form method="post" action="/settings/restart">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn btn-danger" onclick="return confirm('Restart the tgyt service now?')">🔄 Restart service</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Environment (redacted)</h2>
+  <pre class="log-view">{% for line in env_lines %}{{ line }}
+{% endfor %}</pre>
+</div>
+{% endblock %}

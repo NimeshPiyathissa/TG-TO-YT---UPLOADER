@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}TG→YT Uploader{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js"></script>
+</head>
+<body>
+{% set user = current_user(request) %}
+{% if user %}
+<div class="shell">
+  <button class="nav-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰ Menu</button>
+  <nav class="sidebar">
+    <div class="brand">🎬 TG→YT</div>
+    <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">📊 Dashboard</a>
+    <a href="/channels" class="{{ 'active' if request.url.path.startswith('/channels') else '' }}">📺 Channels</a>
+    <a href="/users" class="{{ 'active' if request.url.path == '/users' else '' }}">👤 Users</a>
+    <a href="/jobs" class="{{ 'active' if request.url.path == '/jobs' else '' }}">⚡ Jobs</a>
+    <a href="/videos" class="{{ 'active' if request.url.path == '/videos' else '' }}">🎞 Videos</a>
+    <a href="/logs" class="{{ 'active' if request.url.path == '/logs' else '' }}">📜 Logs</a>
+    <a href="/settings" class="{{ 'active' if request.url.path == '/settings' else '' }}">⚙️ Settings</a>
+    <form method="post" action="/logout" class="logout-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <button type="submit" class="link-btn">🚪 Logout ({{ user.username }})</button>
+    </form>
+  </nav>
+  <main class="content">
+    {% if not project_audited() %}
+    <div class="banner banner-warn">⚠️ This API project hasn't passed Google's compliance audit yet — every upload lands Private.</div>
+    {% endif %}
+    {% block flashes %}
+    {% if flashes %}
+      {% for f in flashes %}
+      <div class="flash flash-{{ f.level }}">{{ f.text }}</div>
+      {% endfor %}
+    {% endif %}
+    {% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+{% block guest_content %}{% endblock %}
+{% endif %}
+</body>
+</html>

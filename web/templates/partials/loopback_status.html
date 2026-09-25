@@ -1,0 +1,11 @@
+{% if status == "pending" %}
+<div id="loopback-status" hx-get="/channels/link/loopback/status?state={{ state }}" hx-trigger="every 3s" hx-swap="outerHTML">
+  ⏳ Waiting for the Google redirect via your SSH tunnel…
+</div>
+{% elif status == "done" %}
+<div id="loopback-status" class="flash flash-success">✅ Linked channel: {{ channel.channel_title }}. <a href="/channels">Go to Channels</a></div>
+{% elif status == "error" %}
+<div id="loopback-status" class="flash flash-error">❌ Linking failed: {{ error }}</div>
+{% else %}
+<div id="loopback-status" class="flash flash-error">Unknown or expired linking session.</div>
+{% endif %}

@@ -1,0 +1,35 @@
+<table class="table">
+  <thead><tr><th>ID</th><th>State</th><th>User</th><th>File</th><th>Size</th><th>Progress</th><th>Queued</th><th></th></tr></thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr>
+      <td>#{{ j.id }}</td>
+      <td><span class="badge badge-{{ j.state|lower }}">{{ j.state }}</span></td>
+      <td>{{ j.tg_user_id }}</td>
+      <td>{{ j.file_name or "—" }}</td>
+      <td>{{ "%.1f"|format((j.size_bytes or 0) / 1048576) }} MB</td>
+      <td>
+        {% if j.size_bytes %}
+          {{ ((j.bytes_sent / j.size_bytes) * 100) | round(0, 'floor') | int }}%
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ j.queued_at[:16] if j.queued_at else "—" }}</td>
+      <td>
+        {% if j.state == "FAILED" %}
+        <form method="post" action="/jobs/{{ j.id }}/retry" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-btn">Retry</button>
+        </form>
+        {% elif j.state not in ("DONE", "CANCELLED") %}
+        <form method="post" action="/jobs/{{ j.id }}/cancel" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-btn">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="empty">No jobs.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

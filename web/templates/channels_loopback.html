@@ -1,0 +1,11 @@
+<div class="panel">
+  <p>1. Run this on your own machine:</p>
+  <div class="copy-row">
+    <code id="ssh-cmd-2">{{ ssh_cmd }}</code>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('ssh-cmd-2').textContent)">📋 Copy</button>
+  </div>
+  <p>2. Then open this consent link in your browser:</p>
+  <a href="{{ auth_url }}" target="_blank" rel="noopener" class="btn btn-primary">Open Google consent</a>
+  <p>3. Waiting for it to complete:</p>
+  {% include "partials/loopback_status.html" with context %}
+</div>

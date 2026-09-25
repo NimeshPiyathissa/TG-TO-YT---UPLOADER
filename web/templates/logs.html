@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Logs — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Logs</h1>
+<div class="tabs">
+  <a href="/logs?tab=app" class="{{ 'active' if tab == 'app' else '' }}">Application</a>
+  <a href="/logs?tab=audit" class="{{ 'active' if tab == 'audit' else '' }}">Audit log</a>
+  <a href="/logs/download" class="btn">⬇️ Download</a>
+</div>
+
+{% if tab == "audit" %}
+<table class="table">
+  <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for a in audit %}
+    <tr><td>{{ a.ts[:19] }}</td><td>{{ a.actor_type }}:{{ a.actor_id }}</td><td>{{ a.action }}</td><td>{{ a.target or "" }}</td><td>{{ a.ip or "" }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No audit entries yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<form method="get" action="/logs" class="filter-bar">
+  <input type="hidden" name="tab" value="app">
+  <select name="level" onchange="this.form.requestSubmit()">
+    <option value="">All levels</option>
+    {% for lvl in ("DEBUG", "INFO", "WARNING", "ERROR") %}
+    <option value="{{ lvl }}" {{ "selected" if level == lvl else "" }}>{{ lvl }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="q" placeholder="Search…" value="{{ q }}">
+  <button type="submit" class="btn">Filter</button>
+</form>
+<pre class="log-view">{% for e in entries %}[{{ e.level }}] {{ e.event }}
+{% endfor %}</pre>
+{% endif %}
+{% endblock %}

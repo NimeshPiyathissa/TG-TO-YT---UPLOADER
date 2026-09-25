@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Add a channel — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Add a channel</h1>
+
+{% if not client_row %}
+<div class="panel">
+  <h2>Step 1 — Upload your OAuth client</h2>
+  <p>From Google Cloud Console → APIs &amp; Services → Credentials → your OAuth client → Download JSON.
+     One of these covers every channel you'll ever link — upload it once.</p>
+  <form method="post" action="/channels/add/client-secret" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="file" name="file" accept="application/json" required>
+    <button type="submit" class="btn btn-primary">Upload client_secret.json</button>
+  </form>
+</div>
+{% else %}
+<div class="panel">
+  <h2>OAuth client configured</h2>
+  <p>Client ID: <code>{{ client_row.client_id }}</code> ({{ client_row.client_type }})</p>
+  <p>Authorized redirect URI to register in Google Cloud Console:</p>
+  <div class="copy-row">
+    <code id="redirect-uri">{{ redirect_uri }}</code>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('redirect-uri').textContent)">📋 Copy</button>
+  </div>
+  <details>
+    <summary>Replace the OAuth client</summary>
+    <form method="post" action="/channels/add/client-secret" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="file" name="file" accept="application/json" required>
+      <button type="submit" class="btn">Upload new client_secret.json</button>
+    </form>
+  </details>
+</div>
+
+<div class="panel">
+  <h2>Step 2 — Link a channel</h2>
+  {% if oauth_mode == "hostname" %}
+  <form method="post" action="/channels/link/start">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn btn-primary">🔗 Link a channel (Google consent)</button>
+  </form>
+  {% else %}
+  <form method="post" action="/channels/link/loopback/start" hx-post="/channels/link/loopback/start" hx-target="#loopback-flow" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn btn-primary">🔗 Link a channel (SSH tunnel)</button>
+  </form>
+  <div id="loopback-flow"></div>
+  {% endif %}
+</div>
+
+<details class="panel">
+  <summary><strong>Advanced linking</strong> (SSH tunnel or offline helper — works regardless of mode)</summary>
+
+  <h3>SSH tunnel</h3>
+  <p>Run this on your own machine, then click the button above:</p>
+  <div class="copy-row">
+    <code id="ssh-cmd">{{ ssh_cmd }}</code>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('ssh-cmd').textContent)">📋 Copy</button>
+  </div>
+  {% if oauth_mode == "hostname" %}
+  <form method="post" action="/channels/link/loopback/start" hx-post="/channels/link/loopback/start" hx-target="#loopback-flow-adv" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn">Start SSH-tunnel linking</button>
+  </form>
+  <div id="loopback-flow-adv"></div>
+  {% endif %}
+
+  <h3>Offline helper (no SSH, no tunnel)</h3>
+  <p>Download <code>link_channel.py</code>, run it on your own computer with the same client_secret.json,
+     it opens your browser and writes <code>token.json</code>. Upload that file here.</p>
+  <a href="/channels/link/download-helper" class="btn">⬇️ Download link_channel.py</a>
+  <form method="post" action="/channels/link/upload-token" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="file" name="file" accept="application/json" required>
+    <button type="submit" class="btn btn-primary">Upload token.json</button>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

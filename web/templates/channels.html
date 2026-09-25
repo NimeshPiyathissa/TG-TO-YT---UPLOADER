@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Channels — TG→YT Uploader{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Channels</h1>
+  <a href="/channels/add" class="btn btn-primary">➕ Link a channel</a>
+</div>
+<div class="card-grid">
+  {% for c in channels %}
+  <div class="card channel-card">
+    {% if c.thumbnail_url %}<img src="{{ c.thumbnail_url }}" class="channel-thumb" alt="">{% endif %}
+    <div class="channel-title">{{ c.channel_title }} {% if c.is_default %}⭐{% endif %}</div>
+    <div class="channel-handle">{{ c.handle or "" }}</div>
+    <div>{{ status_label.get(c.status, c.status) }}</div>
+    <div class="card-sub">{{ c.uploads_count }} uploads · last used {{ c.last_used_at[:10] if c.last_used_at else "never" }}</div>
+    <div class="card-actions">
+      {% if not c.is_default %}
+      <form method="post" action="/channels/{{ c.id }}/set-default" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <button type="submit" class="link-btn">Set default</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/channels/{{ c.id }}/reauthorize" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <button type="submit" class="link-btn">Re-authorize</button>
+      </form>
+      <button type="button" class="link-btn link-btn-danger"
+              hx-get="/channels/{{ c.id }}/remove-confirm" hx-target="#confirm-{{ c.id }}" hx-swap="innerHTML">
+        Remove
+      </button>
+    </div>
+    <div id="confirm-{{ c.id }}"></div>
+  </div>
+  {% else %}
+  <p class="empty">No channels linked yet. <a href="/channels/add">Link one</a>.</p>
+  {% endfor %}
+</div>
+{% endblock %}

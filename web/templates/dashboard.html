@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TG→YT Uploader{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <span class="eyebrow">Control room</span>
+    <h1>Dashboard</h1>
+  </div>
+</div>
+
+<div class="pipeline-panel">
+  <div class="pipeline-panel-head">
+    <span class="pipeline-title">Upload pipeline</span>
+    <span class="pipeline-total">{{ pipeline_total }} job{{ "s" if pipeline_total != 1 else "" }} tracked</span>
+  </div>
+  <div class="pipeline-track" role="img" aria-label="Job pipeline: {{ pipeline|map(attribute='label')|join(', ') }}">
+    {% for band in pipeline %}
+      {% if band.count > 0 %}
+      <div class="pipeline-seg pipeline-seg--{{ band.key }}" style="width: {{ band.pct }}%" title="{{ band.label }}: {{ band.count }}"></div>
+      {% endif %}
+    {% endfor %}
+    {% if pipeline_total == 0 %}<div class="pipeline-seg pipeline-seg--empty" style="width: 100%"></div>{% endif %}
+  </div>
+  <div class="pipeline-legend">
+    {% for band in pipeline %}
+    <span class="pipeline-legend-item"><i class="dot dot--{{ band.key }}"></i>{{ band.label }} <b>{{ band.count }}</b></span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card-grid">
+  <div class="card"><div class="card-label">Linked channels</div><div class="card-value">{{ channels }}</div></div>
+  <div class="card"><div class="card-label">Uploads today</div><div class="card-value">{{ uploads_today }} <span class="card-sub">/ {{ uploads_bucket_limit }} left {{ uploads_remaining }}</span></div></div>
+  <div class="card"><div class="card-label">Shared quota used</div><div class="card-value">{{ general_used }} <span class="card-sub">/ {{ general_limit }}</span></div></div>
+  <div class="card"><div class="card-label">Search quota used</div><div class="card-value">{{ search_used }} <span class="card-sub">/ {{ search_limit }}</span></div></div>
+  <div class="card"><div class="card-label">Disk free (jobs volume)</div><div class="card-value">{{ "%.1f"|format(disk_free_gb) if disk_free_gb is not none else "?" }} GB</div></div>
+  <div class="card"><div class="card-label">Bot</div><div class="card-value">{{ "🟢 Up" if bot_up else "🔴 Down" }}</div></div>
+  <div class="card"><div class="card-label">Uptime</div><div class="card-value">{{ uptime }}</div></div>
+</div>
+
+<h2>Active jobs</h2>
+<div id="dashboard-jobs" hx-get="/partials/dashboard-jobs" hx-trigger="every 3s" hx-swap="innerHTML">
+  {% include "partials/job_rows.html" %}
+</div>
+{% endblock %}

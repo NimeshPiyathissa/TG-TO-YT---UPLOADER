@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Jobs — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Jobs</h1>
+<form method="get" action="/jobs" class="filter-bar">
+  <select name="state" onchange="this.form.requestSubmit()">
+    <option value="">All states</option>
+    {% for s in all_states %}
+    <option value="{{ s }}" {{ "selected" if filter_state == s else "" }}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="channel_pk" onchange="this.form.requestSubmit()">
+    <option value="">All channels</option>
+    {% for c in channels %}
+    <option value="{{ c.id }}" {{ "selected" if filter_channel_pk == c.id else "" }}>{{ c.channel_title }}</option>
+    {% endfor %}
+  </select>
+</form>
+<div id="jobs-list" hx-get="/partials/jobs-list?state={{ filter_state or '' }}&channel_pk={{ filter_channel_pk or '' }}" hx-trigger="every 5s" hx-swap="innerHTML">
+  {% include "partials/job_rows.html" %}
+</div>
+{% endblock %}

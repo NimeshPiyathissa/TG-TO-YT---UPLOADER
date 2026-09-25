@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.session
+*.session-journal
+/var/lib/tgyt/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Videos — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Videos</h1>
+<form method="get" action="/videos" class="filter-bar">
+  <input type="text" name="q" placeholder="Search title…" value="{{ q }}">
+  <select name="channel_pk" onchange="this.form.requestSubmit()">
+    <option value="">All channels</option>
+    {% for c in channels %}
+    <option value="{{ c.id }}" {{ "selected" if filter_channel_pk == c.id else "" }}>{{ c.channel_title }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn">Search</button>
+</form>
+
+<table class="table">
+  <thead><tr><th>Title</th><th>Channel</th><th>Uploader</th><th>Size</th><th>Duration</th><th>Privacy</th><th>Uploaded</th><th></th></tr></thead>
+  <tbody>
+  {% for v in videos %}
+    <tr>
+      <td><a href="https://youtu.be/{{ v.video_id }}" target="_blank" rel="noopener">{{ v.title or v.video_id }}</a></td>
+      <td>{{ channel_titles.get(v.channel_pk, "—") }}</td>
+      <td>{{ v.uploaded_by }}</td>
+      <td>{{ "%.1f"|format((v.size_bytes or 0) / 1048576) }} MB</td>
+      <td>{{ (v.duration_s or 0) | int }}s</td>
+      <td>{{ v.privacy_actual }}</td>
+      <td>{{ v.uploaded_at[:16] }}</td>
+      <td>
+        <form method="post" action="/videos/{{ v.video_id }}/delete" class="inline-form"
+              onsubmit="return confirm('Type DELETE to confirm removal.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <input type="text" name="confirm" placeholder="type DELETE" size="8">
+          <button type="submit" class="link-btn link-btn-danger">🗑 Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="empty">No videos uploaded yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
