@@ -21,6 +21,7 @@
     <a href="/videos" class="{{ 'active' if request.url.path == '/videos' else '' }}">🎞 Videos</a>
     <a href="/logs" class="{{ 'active' if request.url.path == '/logs' else '' }}">📜 Logs</a>
     <a href="/settings" class="{{ 'active' if request.url.path == '/settings' else '' }}">⚙️ Settings</a>
+    <a href="/account/totp" class="{{ 'active' if request.url.path.startswith('/account') else '' }}">🔐 Two-factor</a>
     <form method="post" action="/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
       <button type="submit" class="link-btn">🚪 Logout ({{ user.username }})</button>

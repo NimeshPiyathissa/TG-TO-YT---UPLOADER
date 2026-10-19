@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Two-factor — TG→YT Uploader{% endblock %}
+{% block content %}
+<h1>Two-factor authentication</h1>
+
+{% if enabled %}
+<div class="panel">
+  <h2>Status</h2>
+  <p>Two-factor authentication is <strong>on</strong> for your account.</p>
+  {% if require_totp %}
+  <p class="card-sub">REQUIRE_TOTP is set in the env file, so it can't be turned off here.</p>
+  {% else %}
+  <form method="post" action="/account/totp/disable">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Password
+      <input type="password" name="password" required>
+    </label>
+    <label>Current authentication code
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required>
+    </label>
+    <button type="submit" class="btn btn-danger">Turn off two-factor</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<div class="panel">
+  {% if enroll_required %}
+  <p class="flash flash-info">Two-factor authentication is required. Set it up to continue.</p>
+  {% endif %}
+  <h2>1. Scan the QR code</h2>
+  <p>Open an authenticator app (Google Authenticator, Authy, 1Password…) and scan this.</p>
+  <div class="qr">{{ qr_svg|safe }}</div>
+  <p class="card-sub">Can't scan? Enter this key manually: <code>{{ secret }}</code></p>
+
+  <h2>2. Enter the 6-digit code</h2>
+  <form method="post" action="/account/totp/confirm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Authentication code
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required autofocus>
+    </label>
+    <button type="submit" class="btn btn-primary">Turn on two-factor</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

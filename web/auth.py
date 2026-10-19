@@ -21,6 +21,11 @@ LOCKOUT_MINUTES = 15
 SESSION_USER_ID = "app_user_id"
 SESSION_USERNAME = "app_username"
 SESSION_ROLE = "app_role"
+SESSION_ENROLL_TOTP = "totp_enroll_required"
+SESSION_PENDING_TOTP = "totp_pending_secret"
+
+# Paths a session may reach while it still has to enroll in TOTP.
+ENROLLMENT_PATHS = ("/account/totp", "/logout", "/static")
 
 
 def client_ip(request: Request) -> str:
@@ -41,11 +46,13 @@ def _is_locked(locked_until: Optional[str]) -> bool:
 
 
 class LoginResult:
-    def __init__(self, ok: bool, reason: str = "", needs_totp: bool = False, user_row=None):
+    def __init__(self, ok: bool, reason: str = "", needs_totp: bool = False, user_row=None,
+                 enroll_required: bool = False):
         self.ok = ok
         self.reason = reason
         self.needs_totp = needs_totp
         self.user_row = user_row
+        self.enroll_required = enroll_required
 
 
 async def attempt_login(store: Store, ip: str, username: str, password: str,
@@ -67,24 +74,29 @@ async def attempt_login(store: Store, ip: str, username: str, password: str,
         await store.record_ip_failure(ip, MAX_ATTEMPTS, LOCKOUT_MINUTES)
         return LoginResult(False, "Invalid username or password.")
 
+    enroll_required = False
     needs_totp = require_totp_default or user["totp_secret_enc"] is not None
     if needs_totp:
         if not user["totp_secret_enc"]:
-            return LoginResult(False, "TOTP is required but not set up for this account yet. Contact the owner.")
-        if not totp_code:
+            # Password is verified but there is no second factor to check yet.
+            # Let the session in restricted to the enrollment page, otherwise
+            # REQUIRE_TOTP=true would lock out every account that hasn't enrolled.
+            enroll_required = True
+        elif not totp_code:
             return LoginResult(False, "", needs_totp=True, user_row=user)
-        secret = crypto.decrypt(user["totp_secret_enc"])
-        if not security.verify_totp(secret, totp_code):
-            await store.record_login_failure(username, MAX_ATTEMPTS, LOCKOUT_MINUTES)
-            await store.record_ip_failure(ip, MAX_ATTEMPTS, LOCKOUT_MINUTES)
-            return LoginResult(False, "Invalid authentication code.", needs_totp=True, user_row=user)
+        else:
+            secret = crypto.decrypt(user["totp_secret_enc"])
+            if not security.verify_totp(secret, totp_code):
+                await store.record_login_failure(username, MAX_ATTEMPTS, LOCKOUT_MINUTES)
+                await store.record_ip_failure(ip, MAX_ATTEMPTS, LOCKOUT_MINUTES)
+                return LoginResult(False, "Invalid authentication code.", needs_totp=True, user_row=user)
 
     if security.needs_rehash(user["password_hash"]):
         await store.set_app_user_password(user["id"], security.hash_password(password))
 
     await store.record_login_success(username)
     await store.clear_ip_throttle(ip)
-    return LoginResult(True, user_row=user)
+    return LoginResult(True, user_row=user, enroll_required=enroll_required)
 
 
 def current_user(request: Request) -> Optional[dict]:
@@ -98,7 +110,13 @@ def current_user(request: Request) -> Optional[dict]:
     }
 
 
-def log_in_session(request: Request, user_row) -> None:
+def must_enroll_totp(request: Request) -> bool:
+    return bool(request.session.get(SESSION_ENROLL_TOTP))
+
+
+def log_in_session(request: Request, user_row, enroll_totp: bool = False) -> None:
+    if enroll_totp:
+        request.session[SESSION_ENROLL_TOTP] = True
     request.session[SESSION_USER_ID] = user_row["id"]
     request.session[SESSION_USERNAME] = user_row["username"]
     request.session[SESSION_ROLE] = user_row["role"]

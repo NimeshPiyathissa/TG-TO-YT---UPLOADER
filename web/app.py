@@ -55,6 +55,8 @@ def create_app(store: Store) -> FastAPI:
         if path not in PUBLIC_PATHS and not path.startswith("/static"):
             if auth.current_user(request) is None:
                 return RedirectResponse(f"/login?next={path}", status_code=303)
+            if auth.must_enroll_totp(request) and not path.startswith(auth.ENROLLMENT_PATHS):
+                return RedirectResponse("/account/totp", status_code=303)
         return await call_next(request)
 
     app.add_middleware(
@@ -66,10 +68,10 @@ def create_app(store: Store) -> FastAPI:
         max_age=12 * 3600,
     )
 
-    from web.routes import channels, dashboard, jobs, logs, users, videos
+    from web.routes import account, channels, dashboard, jobs, logs, users, videos
     from web.routes import settings as settings_routes
 
-    for module in (dashboard, channels, users, jobs, videos, logs, settings_routes):
+    for module in (dashboard, channels, users, jobs, videos, logs, settings_routes, account):
         app.include_router(module.router)
 
     @app.get("/login")
@@ -103,8 +105,10 @@ def create_app(store: Store) -> FastAPI:
             return templates.TemplateResponse(
                 request, "login.html", {"error": result.reason, "needs_totp": False}, status_code=401,
             )
-        auth.log_in_session(request, result.user_row)
+        auth.log_in_session(request, result.user_row, enroll_totp=result.enroll_required)
         await store.write_audit("app_user", username, "login_success", ip=ip)
+        if result.enroll_required:
+            return RedirectResponse("/account/totp", status_code=303)
         next_url = request.query_params.get("next") or "/"
         return RedirectResponse(next_url if next_url.startswith("/") else "/", status_code=303)
 

@@ -447,3 +447,6 @@ input[type=file] { color: var(--text-dim); font-size: 0.9em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.qr { display: inline-block; background: #fff; padding: 12px; border-radius: 8px; margin: 8px 0; }
+.qr svg { display: block; width: 200px; height: 200px; }
