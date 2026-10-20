@@ -13,7 +13,7 @@ Environment=TGYT_ENV_FILE=/etc/tgyt/tgyt.env
 ExecStart=/opt/tgyt-uploader/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
-MemoryMax=768M
+MemoryMax=2G
 Nice=5
 
 # Hardening (spec section 8)

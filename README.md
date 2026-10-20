@@ -311,7 +311,7 @@ find one.
   lockout), independent of each other.
 - `tgyt.service` runs hardened: `NoNewPrivileges`, `PrivateTmp`,
   `ProtectSystem=strict`, `ProtectHome`, a narrow `ReadWritePaths`, and a
-  768MB memory cap.
+  2GB memory cap.
 
 ## Assumptions made while building this (v2)
 
