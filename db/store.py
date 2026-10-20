@@ -457,6 +457,14 @@ class Store:
         rows = await cur.fetchall()
         return [Job.from_row(r) for r in rows]
 
+    async def queued_bytes(self) -> int:
+        """Total size of jobs accepted but not yet downloading -- disk they will need."""
+        cur = await self.conn.execute(
+            "SELECT COALESCE(SUM(size_bytes), 0) AS n FROM jobs WHERE state = 'QUEUED'"
+        )
+        row = await cur.fetchone()
+        return int(row["n"])
+
     async def update_job_fields(self, job_id: int, **fields: Any) -> None:
         if not fields:
             return

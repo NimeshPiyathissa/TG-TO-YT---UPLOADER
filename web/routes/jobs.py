@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
+from bot.downloader import retry_target
 from db.store import JOB_TERMINAL_STATES
 from web.csrf import require_csrf
 from web.flash import flash, pop_flashes
@@ -62,7 +63,6 @@ async def retry_job(job_id: int, request: Request, csrf_ok: None = Depends(requi
     elif job.state != "FAILED":
         flash(request, "Only failed jobs can be retried.", "error")
     else:
-        target = "READY" if job.local_path and job.channel_pk else "QUEUED"
-        await store.transition_job(job_id, target)
+        await store.transition_job(job_id, retry_target(job), attempts=0)
         flash(request, f"Retrying job #{job_id}.", "success")
     return RedirectResponse("/jobs", status_code=303)

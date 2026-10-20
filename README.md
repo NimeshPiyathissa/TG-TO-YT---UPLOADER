@@ -250,6 +250,32 @@ Disk, not RAM: job files live at `$JOBS_DIR/<job_id>/` (default
 `/var/lib/tgyt/jobs`), never `/tmp` — a 2GB download into tmpfs could OOM a
 small VM.
 
+## Large files (up to 4GB)
+
+Set `MAX_FILE_BYTES=4294967296` in the env file when the relay account is
+Telegram Premium (the default is 2GiB). Behaviour worth knowing:
+
+- **Restarts are safe.** `systemctl restart tgyt` (or a reboot) leaves running
+  jobs and their files alone. An upload resumes from the offset Google has
+  confirmed; a download starts over. Only a user cancel deletes a job's files.
+- **Retries.** A failed upload is retried up to 8 times in a row, waiting
+  30s, 1m, 2m, 4m, 8m, then 15m. The count resets once an attempt makes
+  progress and on a manual Retry. Within one attempt, network errors are
+  retried for roughly 3 minutes before it counts as a failure.
+- **Disk.** A download needs `size x 1.2` plus `MIN_FREE_DISK_BYTES` (5GiB)
+  free, after setting aside what running downloads and queued jobs still need.
+  If it doesn't fit but other jobs are using the disk, the download waits (up
+  to 6 hours) instead of failing. Rough capacity: free space / 4GB per job.
+- **Cleanup.** Finished and failed jobs' files go after `JOB_RETENTION_HOURS`;
+  jobs left waiting at channel/caption selection expire after 48 hours.
+  Retrying a failed job whose file has been swept downloads it again.
+- **Memory.** Downloads stream to disk and uploads read one
+  `UPLOAD_CHUNK_BYTES` slice (8MB) at a time; nothing holds a whole file.
+
+Tests (`pip install -r requirements-dev.txt`, then `pytest`) cover resumable
+upload against a fake Google endpoint, restart behaviour, retries, disk checks
+and the sweeper. `pytest -m slow` adds a 4.4GB-offset run.
+
 ## Backup / restore
 
 - **Database**: `/var/lib/tgyt/tgyt.db` (plus `-wal`/`-shm` while running).

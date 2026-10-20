@@ -71,7 +71,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
             return
 
         try:
-            check_disk_space(size)
+            check_disk_space(size, committed_bytes=await store.queued_bytes())
         except InsufficientDisk as exc:
             need_gb, free_gb = exc.need_bytes / 1024**3, exc.free_bytes / 1024**3
             await message.reply(f"💾 Need {need_gb:.1f} GB free, only {free_gb:.1f} GB available.")

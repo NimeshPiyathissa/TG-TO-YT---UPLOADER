@@ -15,7 +15,7 @@ import asyncio
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -26,7 +26,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import flow
 from bot.config import settings
-from bot.downloader import DownloadTooLarge, InsufficientDisk, cleanup_job_dir, download_job
+from bot.downloader import DownloadTooLarge, InsufficientDisk, cleanup_job_dir, download_job, retry_target
 from bot.ui import ProgressReporter, human_bytes, human_elapsed
 from db.store import Job, Store
 from yt.metadata import probe_video
@@ -41,8 +41,18 @@ log = structlog.get_logger(__name__)
 LEASE_SECONDS = 60
 HEARTBEAT_INTERVAL = 30
 POLL_INTERVAL = 2
-MAX_ATTEMPTS = 5
+# Consecutive failed upload attempts before giving up. The count resets as soon as
+# an attempt makes progress (and on a manual retry), so a long upload that hiccups
+# now and then isn't killed by hiccups that each recovered.
+MAX_ATTEMPTS = 8
 UNVERIFIED_DURATION_WARN_S = 15 * 60
+# A job parked at channel/caption selection this long is abandoned; its file is freed.
+AWAITING_EXPIRY_HOURS = 48
+
+
+def _retry_delay(attempts: int) -> int:
+    """30s, 1m, 2m, 4m, 8m, then 15m: long enough to outlast a real outage."""
+    return min(900, 30 * 2 ** (attempts - 1))
 
 
 class JobQueue:
@@ -68,9 +78,12 @@ class JobQueue:
         self._stopping = True
         for t in self._workers:
             t.cancel()
-        for t in list(self._tasks.values()):
+        running = list(self._tasks.values())
+        for t in running:
             t.cancel()
-        await asyncio.gather(*self._workers, return_exceptions=True)
+        # Wait for the job tasks too, so each one has released its lease before the
+        # DB connection is closed.
+        await asyncio.gather(*self._workers, *running, return_exceptions=True)
 
     def cancel_job(self, job_id: int) -> bool:
         task = self._tasks.get(job_id)
@@ -122,29 +135,63 @@ class JobQueue:
                 self._tasks.pop(job.id, None)
 
     async def _sweeper(self) -> None:
-        """Deletes job dirs for terminal jobs older than JOB_RETENTION_HOURS,
-        and any orphaned dir with no matching row."""
         while not self._stopping:
             try:
                 await asyncio.sleep(600)
-                jobs_root = Path(settings.jobs_dir)
-                if not jobs_root.exists():
-                    continue
-                now = datetime.now(timezone.utc)
-                for child in jobs_root.iterdir():
-                    if not child.is_dir() or not child.name.isdigit():
-                        continue
-                    job = await self.store.get_job(int(child.name))
-                    stale = job is None
-                    if job is not None and job.state in ("DONE", "FAILED", "CANCELLED") and job.finished_at:
-                        age = now - datetime.fromisoformat(job.finished_at)
-                        stale = age.total_seconds() > settings.job_retention_hours * 3600
-                    if stale:
-                        cleanup_job_dir(int(child.name))
+                await self.sweep_once()
             except asyncio.CancelledError:
                 return
             except Exception:
                 log.exception("queue.sweeper_error")
+
+    async def sweep_once(self) -> None:
+        """Expires jobs abandoned at channel/caption selection, then deletes job dirs
+        for terminal jobs older than JOB_RETENTION_HOURS and any orphaned dir with no
+        matching row. rmtree runs in a thread so freeing a multi-GB file can't stall
+        the event loop (and with it the lease heartbeats)."""
+        now = datetime.now(timezone.utc)
+        await self._expire_stale_awaiting(now)
+        jobs_root = Path(settings.jobs_dir)
+        if not jobs_root.exists():
+            return
+        for child in jobs_root.iterdir():
+            if not child.is_dir() or not child.name.isdigit():
+                continue
+            job = await self.store.get_job(int(child.name))
+            stale = job is None
+            if job is not None and job.state in ("DONE", "FAILED", "CANCELLED") and job.finished_at:
+                age = now - datetime.fromisoformat(job.finished_at)
+                stale = age.total_seconds() > settings.job_retention_hours * 3600
+            if stale:
+                await asyncio.to_thread(cleanup_job_dir, int(child.name))
+
+    async def _expire_stale_awaiting(self, now: datetime) -> None:
+        cutoff = timedelta(hours=AWAITING_EXPIRY_HOURS)
+        for job in await self.store.list_active_jobs():
+            if job.state not in ("AWAITING_CHANNEL", "AWAITING_CAPTION"):
+                continue
+            since = datetime.fromisoformat(job.download_finished_at or job.queued_at)
+            if now - since < cutoff:
+                continue
+            try:
+                await self.store.transition_job(
+                    job.id, "CANCELLED", last_error=f"expired: no reply within {AWAITING_EXPIRY_HOURS}h")
+            except Exception:
+                log.warning("queue.expire_failed", job_id=job.id, exc_info=True)
+                continue
+            session = await self.store.get_flow_session(job.tg_user_id)
+            if session is not None and session["job_id"] == job.id:
+                await self.store.clear_flow_session(job.tg_user_id)
+            await asyncio.to_thread(cleanup_job_dir, job.id)
+            log.info("queue.job_expired", job_id=job.id, state=job.state)
+            try:
+                await self.bot.send_message(
+                    job.chat_id,
+                    f"⌛ Job #{job.id} expired: nothing was chosen within {AWAITING_EXPIRY_HOURS} hours, "
+                    "so the downloaded file was removed. Send the video again to start over.",
+                )
+            except Exception:
+                pass
 
     async def _heartbeat(self, job_id: int) -> None:
         try:
@@ -267,7 +314,16 @@ class JobQueue:
             reporter = ProgressReporter(self.bot, job.chat_id, job.status_message_id)
             reporter.start()
 
+            progress_seen = False
+
             async def _on_progress(current: int, total: int) -> None:
+                nonlocal progress_seen
+                if not progress_seen:
+                    progress_seen = True
+                    if job.attempts:
+                        # Real forward progress: earlier failures were recoverable, so
+                        # they shouldn't count against the retry budget any more.
+                        await self.store.update_job_fields(job_id, attempts=0)
                 elapsed = human_elapsed(time.monotonic() - upload_started)
                 reporter.update(
                     "upload", current, total,
@@ -344,7 +400,7 @@ class JobQueue:
             await self.store.update_job_fields(job_id, attempts=attempts, last_error=reason[:2000])
 
         if attempts < MAX_ATTEMPTS:
-            delay = min(300, 2 ** attempts)
+            delay = _retry_delay(attempts)
             try:
                 await self.bot.send_message(
                     job.chat_id,
@@ -432,6 +488,13 @@ class JobQueue:
         job = await self.store.get_job(job_id)
         if job is None:
             return
+        if self._stopping:
+            # Service shutdown/restart, not a user cancel: leave the job and its file
+            # alone. _run_* releases the lease on the way out, so the next start
+            # reclaims it -- an upload resumes from Google's confirmed offset and a
+            # download starts over -- instead of the work being thrown away.
+            log.info("queue.job_left_for_resume", job_id=job_id, state=job.state)
+            return
         if job.state not in ("DONE", "FAILED", "CANCELLED"):
             try:
                 await self.store.transition_job(job_id, "CANCELLED")
@@ -448,5 +511,5 @@ class JobQueue:
         job = await self.store.get_job(job_id)
         if job is None or job.state != "FAILED":
             return False
-        await self.store.transition_job(job_id, "READY" if job.local_path and job.channel_pk else "QUEUED")
+        await self.store.transition_job(job_id, retry_target(job), attempts=0)
         return True

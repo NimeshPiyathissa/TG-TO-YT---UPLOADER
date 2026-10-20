@@ -27,7 +27,15 @@ log = structlog.get_logger(__name__)
 
 UPLOAD_INIT_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
 _TRANSIENT_STATUSES = {500, 502, 503, 504}
-_MAX_ATTEMPTS = 5
+# Consecutive failures tolerated on one chunk window before giving up. With the
+# 60s backoff cap this rides out roughly a 3-minute network outage in-loop; the
+# queue's own retry (bot/queue.py) covers longer ones and resumes from the
+# confirmed offset, so a multi-GB upload never restarts from zero over a blip.
+_MAX_ATTEMPTS = 8
+_BACKOFF_CAP_S = 60
+# Fresh sessions one call may start after the first. Each costs a unit of the
+# 100/day `uploads` bucket, so a session Google keeps rejecting must not loop.
+_MAX_SESSION_RESTARTS = 3
 
 AccessTokenProvider = Callable[[bool], Awaitable[str]]
 ProgressCallback = Callable[[int, int], Awaitable[None]]
@@ -58,7 +66,7 @@ def _video_body(job: Job) -> dict:
 
 
 async def _backoff_sleep(attempt: int) -> None:
-    delay = min(32, 2 ** attempt) + random.uniform(0, 1)
+    delay = min(_BACKOFF_CAP_S, 2 ** attempt) + random.uniform(0, 1)
     await asyncio.sleep(delay)
 
 
@@ -83,22 +91,29 @@ async def _init_session(store: Store, job: Job, access_token: str) -> str:
     return location
 
 
-async def _probe_offset(session_uri: str, total: int) -> Optional[int]:
+async def _probe_offset(session_uri: str, total: int) -> tuple[Optional[int], Optional[dict]]:
     """PUT with an empty body and Content-Range: bytes */<total> to ask Google
-    what it already has. Returns the confirmed byte count, or None if the
+    what it already has. Returns ``(confirmed_bytes, None)`` for a session still
+    in progress, ``(total, video_resource)`` if the upload already finished (the
+    final chunk landed but we never saw the response), or ``(None, None)`` if the
     session is dead (404/410) and must be restarted from zero."""
     headers = {"Content-Range": f"bytes */{total}", "Content-Length": "0"}
     async with aiohttp.ClientSession() as session:
         async with session.put(session_uri, headers=headers) as resp:
             if resp.status in (404, 410):
-                return None
+                return None, None
             if resp.status in (200, 201):
-                return total
+                try:
+                    return total, await resp.json()
+                except (aiohttp.ContentTypeError, ValueError):
+                    return total, {}
             if resp.status == 308:
                 rng = resp.headers.get("Range")
                 if rng and "-" in rng:
-                    return int(rng.split("-")[1]) + 1
-                return 0
+                    return int(rng.split("-")[1]) + 1, None
+                return 0, None
+            if resp.status in _TRANSIENT_STATUSES:
+                raise _HttpTransient(resp.status)
             raise UploadError(f"Unexpected status probing upload offset: HTTP {resp.status}")
 
 
@@ -149,6 +164,15 @@ class _HttpTransient(Exception):
         self.status = status
 
 
+async def _finish(store: Store, job: Job, total: int, resource: dict) -> str:
+    video_id = resource.get("id")
+    if not video_id:
+        raise UploadError("Upload completed but Google didn't return a video id.")
+    await store.update_job_fields(job.id, bytes_sent=total, video_id=video_id)
+    log.info("upload.complete", job_id=job.id, video_id=video_id)
+    return video_id
+
+
 async def start_or_resume_upload(
     store: Store, job: Job, access_token_provider: AccessTokenProvider,
     on_progress: Optional[ProgressCallback] = None,
@@ -165,9 +189,11 @@ async def start_or_resume_upload(
     session_uri = job.upload_session_uri
     start = job.bytes_sent or 0
     if session_uri:
-        probed = await _probe_offset(session_uri, total)
+        probed, resource = await _probe_offset(session_uri, total)
         if probed is None:
             session_uri = None  # dead session -- restart from zero, costs one more 'uploads' unit
+        elif resource is not None:
+            return await _finish(store, job, total, resource)  # finished before we recorded it
         else:
             start = probed
             await store.update_job_fields(job.id, bytes_sent=start)
@@ -178,8 +204,31 @@ async def start_or_resume_upload(
 
     chunk_bytes = settings.upload_chunk_bytes
     attempt = 0
-    while start < total:
+    restarts = 0
+    needs_probe = False
+    while True:
         try:
+            if needs_probe:
+                # A request died mid-flight, so Google may have kept part or all
+                # of that chunk. Ask instead of blindly resending the same range.
+                probed, resource = await _probe_offset(session_uri, total)
+                needs_probe = False
+                if probed is None:
+                    restarts += 1
+                    if restarts > _MAX_SESSION_RESTARTS:
+                        raise UploadError("Google keeps invalidating the upload session.")
+                    session_uri = await _init_session(store, job, access_token)
+                    start = 0
+                    attempt = 0
+                elif resource is not None:
+                    return await _finish(store, job, total, resource)
+                else:
+                    start = probed
+                    await store.update_job_fields(job.id, bytes_sent=start)
+            if start >= total:
+                # Every byte is acknowledged but no final response was seen yet.
+                needs_probe = True
+                raise _HttpTransient(308)
             confirmed, final = await _put_chunk(session_uri, access_token, job.local_path, start, total, chunk_bytes)
         except _Http401:
             access_token = await access_token_provider(True)
@@ -188,6 +237,9 @@ async def start_or_resume_upload(
                 raise UploadError("Upload failed after refreshing credentials -- please retry.")
             continue
         except _Http404:
+            restarts += 1
+            if restarts > _MAX_SESSION_RESTARTS:
+                raise UploadError("Google keeps invalidating the upload session.")
             session_uri = await _init_session(store, job, access_token)
             start = 0
             attempt = 0
@@ -196,21 +248,26 @@ async def start_or_resume_upload(
             attempt += 1
             if attempt >= _MAX_ATTEMPTS:
                 raise UploadError(f"Upload failed after {_MAX_ATTEMPTS} attempts: {exc}")
+            needs_probe = True
+            await _backoff_sleep(attempt)
+            continue
+
+        if final is not None:
+            return await _finish(store, job, total, final)
+
+        new_start = confirmed if confirmed is not None else start
+        if new_start <= start:
+            # 308 without moving the offset: count it as a failure so a server that
+            # never acknowledges bytes can't spin this loop forever.
+            attempt += 1
+            if attempt >= _MAX_ATTEMPTS:
+                raise UploadError("Upload stalled: Google isn't acknowledging any bytes.")
+            needs_probe = True
             await _backoff_sleep(attempt)
             continue
 
         attempt = 0
-        if final is not None:
-            video_id = final.get("id")
-            if not video_id:
-                raise UploadError("Upload completed but Google didn't return a video id.")
-            await store.update_job_fields(job.id, bytes_sent=total, video_id=video_id)
-            log.info("upload.complete", job_id=job.id, video_id=video_id)
-            return video_id
-
-        start = confirmed if confirmed is not None else start
+        start = new_start
         await store.update_job_fields(job.id, bytes_sent=start)
         if on_progress:
             await on_progress(start, total)
-
-    raise UploadError("Upload loop exited without a video id -- this should not happen.")

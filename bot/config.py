@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     max_concurrent_uploads: int = 1
     default_privacy: str = "private"
     job_retention_hours: int = 24
+    # Free space always left untouched on the jobs volume, on top of the 1.2x
+    # per-file headroom -- the SQLite DB and logs share that disk.
+    min_free_disk_bytes: int = 5_368_709_120
 
     log_level: str = "INFO"
 
