@@ -404,14 +404,15 @@ class Store:
         tg_file_unique_id: Optional[str] = None, source_chat_id: Optional[int] = None,
         source_message_id: Optional[int] = None, file_name: Optional[str] = None,
         size_bytes: Optional[int] = None, mime: Optional[str] = None,
+        privacy: str = "private", category_id: Optional[str] = None,
     ) -> int:
         cur = await self.conn.execute(
             """INSERT INTO jobs (tg_user_id, chat_id, tg_file_id, tg_file_unique_id,
                                   source_chat_id, source_message_id, file_name, size_bytes, mime,
-                                  privacy, made_for_kids, state, bytes_sent, attempts, queued_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'private', 0, 'QUEUED', 0, 0, ?)""",
+                                  privacy, category_id, made_for_kids, state, bytes_sent, attempts, queued_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'QUEUED', 0, 0, ?)""",
             (tg_user_id, chat_id, tg_file_id, tg_file_unique_id, source_chat_id,
-             source_message_id, file_name, size_bytes, mime, now()),
+             source_message_id, file_name, size_bytes, mime, privacy, category_id, now()),
         )
         await self.conn.commit()
         return cur.lastrowid

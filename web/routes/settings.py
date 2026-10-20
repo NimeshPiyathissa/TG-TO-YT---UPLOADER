@@ -19,7 +19,16 @@ router = APIRouter()
 async def settings_page(request: Request):
     templates = request.app.state.templates
     store = request.app.state.store
-    db_settings = await store.all_settings()
+    # Stored values win; otherwise show what the env file currently gives.
+    db_settings = {
+        "default_privacy": app_settings.default_privacy,
+        "default_category_id": "",
+        "max_concurrent_downloads": app_settings.max_concurrent_downloads,
+        "max_concurrent_uploads": app_settings.max_concurrent_uploads,
+        "upload_chunk_bytes": app_settings.upload_chunk_bytes,
+        "job_retention_hours": app_settings.job_retention_hours,
+        **await store.all_settings(),
+    }
     quota_summary = await store.quota_summary()
     return templates.TemplateResponse(request, "settings.html", {
         "audited": app_settings.project_audited,
@@ -49,9 +58,16 @@ async def toggle_audited(request: Request, value: str = Form(...), csrf_ok: None
 async def save_defaults(request: Request, default_privacy: str = Form("private"),
                          default_category_id: str = Form(""), csrf_ok: None = Depends(require_csrf)):
     store = request.app.state.store
+    default_category_id = default_category_id.strip()
+    if default_privacy not in ("private", "unlisted", "public"):
+        flash(request, "Privacy must be private, unlisted, or public.", "error")
+        return _redirect()
+    if default_category_id and not default_category_id.isdigit():
+        flash(request, "Category ID must be a number (e.g. 22) or left blank.", "error")
+        return _redirect()
     await store.set_setting("default_privacy", default_privacy)
     await store.set_setting("default_category_id", default_category_id)
-    flash(request, "Defaults saved.", "success")
+    flash(request, "Defaults saved. New uploads will use them.", "success")
     return _redirect()
 
 
@@ -60,11 +76,14 @@ async def save_limits(request: Request, max_concurrent_downloads: int = Form(2),
                        max_concurrent_uploads: int = Form(1), upload_chunk_bytes: int = Form(8388608),
                        job_retention_hours: int = Form(24), csrf_ok: None = Depends(require_csrf)):
     store = request.app.state.store
-    # Persisted as an override layer for operator visibility/tuning; the running
-    # queue/upload workers read their concurrency and chunk size from the env-driven
-    # `bot.config.settings` at process start, so a change here takes effect on the
-    # next `systemctl restart tgyt` rather than live -- out of this route's scope
-    # to hot-reload worker pools.
+    if (min(max_concurrent_downloads, max_concurrent_uploads, job_retention_hours) < 1
+            or upload_chunk_bytes <= 0 or upload_chunk_bytes % 262144 != 0):
+        flash(request, "Limits must be at least 1, and the chunk size a multiple of 262144.", "error")
+        return _redirect()
+    # Stored as an override layer over the env file. `bot.config.apply_db_overrides`
+    # copies these onto `settings` at process start, so a change here takes effect
+    # on the next `systemctl restart tgyt` rather than live (worker pools aren't
+    # hot-reloaded).
     await store.set_setting("max_concurrent_downloads", max_concurrent_downloads)
     await store.set_setting("max_concurrent_uploads", max_concurrent_uploads)
     await store.set_setting("upload_chunk_bytes", upload_chunk_bytes)

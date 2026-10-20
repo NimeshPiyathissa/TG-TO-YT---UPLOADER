@@ -154,3 +154,24 @@ def load_settings() -> Settings:
 
 
 settings = load_settings()
+
+# Settings-page limits stored in the DB, layered over the env file at startup.
+# Each is (min value, extra validity check); anything invalid is ignored so a bad
+# stored value can't stop the service from booting.
+_LIMIT_OVERRIDES = {
+    "max_concurrent_downloads": lambda v: v >= 1,
+    "max_concurrent_uploads": lambda v: v >= 1,
+    "upload_chunk_bytes": lambda v: v > 0 and v % 262_144 == 0,
+    "job_retention_hours": lambda v: v >= 1,
+}
+
+
+async def apply_db_overrides(store) -> None:
+    for key, is_valid in _LIMIT_OVERRIDES.items():
+        value = await store.get_setting(key)
+        if value is None:
+            continue
+        if isinstance(value, int) and not isinstance(value, bool) and is_valid(value):
+            setattr(settings, key, value)
+        else:
+            log.warning("config.ignored_db_override", key=key, value=value)

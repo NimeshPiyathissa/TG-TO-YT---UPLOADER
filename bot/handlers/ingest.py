@@ -85,7 +85,14 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
                 "Your video will stay queued until then.",
             )
 
+        # Settings-page values win over the env file; the job freezes them at
+        # creation so a later change doesn't alter a video already in flight.
+        privacy = await store.get_setting("default_privacy", settings.default_privacy)
+        category_id = await store.get_setting("default_category_id", "") or None
+
         job_id = await store.create_job(
+            privacy=privacy,
+            category_id=category_id,
             tg_user_id=user_id,
             chat_id=message.chat.id,
             tg_file_id=media.file_id,

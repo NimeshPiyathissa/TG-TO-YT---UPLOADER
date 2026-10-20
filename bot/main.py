@@ -27,7 +27,7 @@ import structlog
 import uvicorn
 
 from bot import security
-from bot.config import ENV_FILE, INTERNAL_WEB_PROXY_PORT, settings
+from bot.config import ENV_FILE, INTERNAL_WEB_PROXY_PORT, apply_db_overrides, settings
 from bot.logging_setup import configure_logging
 from bot.queue import JobQueue
 from db.store import Store
@@ -101,6 +101,7 @@ async def run() -> None:
     store = Store(settings.db_path)
     await store.connect()
     await _bootstrap_admin(store)
+    await apply_db_overrides(store)
 
     bot_client = pyrogram.Client(
         "tgyt-bot",
