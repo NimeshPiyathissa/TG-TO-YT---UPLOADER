@@ -33,8 +33,9 @@ fi
 if [[ -z "$PUBLIC_IP" ]]; then
     echo "    WARNING: could not auto-detect the public IP. Re-run with PUBLIC_IP=x.x.x.x set, or fill PUBLIC_IP/PUBLIC_HOST into $ENV_FILE by hand afterward."
 fi
+# Set PUBLIC_HOST=your.domain.tld to use a real domain; otherwise fall back to sslip.io.
 PUBLIC_HOST_DASHED="$(echo "$PUBLIC_IP" | tr '.' '-')"
-PUBLIC_HOST="${PUBLIC_HOST_DASHED:+${PUBLIC_HOST_DASHED}.sslip.io}"
+PUBLIC_HOST="${PUBLIC_HOST:-${PUBLIC_HOST_DASHED:+${PUBLIC_HOST_DASHED}.sslip.io}}"
 echo "    PUBLIC_IP=$PUBLIC_IP  PUBLIC_HOST=$PUBLIC_HOST"
 
 # ---------------------------------------------------------------------------
@@ -356,14 +357,19 @@ if [[ "$CURRENT_OAUTH_MODE" == "hostname" ]]; then
     if [[ -z "$CURRENT_PUBLIC_HOST" ]]; then
         echo "    WARNING: OAUTH_MODE=hostname but PUBLIC_HOST is empty in $ENV_FILE -- skipping nginx/certbot. Fill it in and re-run."
     else
-        sed -e "s#__PUBLIC_HOST__#$CURRENT_PUBLIC_HOST#g" -e "s#__WEB_PORT__#$CURRENT_WEB_PORT#g" \
+        NGINX_PORT_SUFFIX=""
+        [[ "$CURRENT_WEB_PORT" != "443" ]] && NGINX_PORT_SUFFIX=":${CURRENT_WEB_PORT}"
+        sed -e "s#__PUBLIC_HOST__#$CURRENT_PUBLIC_HOST#g" -e "s#__WEB_PORT_SUFFIX__#$NGINX_PORT_SUFFIX#g" -e "s#__WEB_PORT__#$CURRENT_WEB_PORT#g" \
             "$REPO_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/tgyt.conf
         ln -sf /etc/nginx/sites-available/tgyt.conf /etc/nginx/sites-enabled/tgyt.conf
         # certbot's HTTP-01 challenge needs port 80 reachable; it's opened here only
         # transiently for issuance -- close it again in your NSG afterward if you like.
         nginx -t && systemctl reload nginx
         echo "==> Requesting TLS certificate for $CURRENT_PUBLIC_HOST (port 80 must be reachable right now)"
-        if certbot --nginx -d "$CURRENT_PUBLIC_HOST" --non-interactive --agree-tos -m "admin@$CURRENT_PUBLIC_HOST" --redirect; then
+        # CERTBOT_EMAIL is optional; without it the cert is registered with no contact address.
+        CERTBOT_ACCOUNT_ARGS=(--register-unsafely-without-email)
+        [[ -n "${CERTBOT_EMAIL:-}" ]] && CERTBOT_ACCOUNT_ARGS=(-m "$CERTBOT_EMAIL")
+        if certbot --nginx -d "$CURRENT_PUBLIC_HOST" --non-interactive --agree-tos "${CERTBOT_ACCOUNT_ARGS[@]}" --redirect; then
             echo "    Certificate issued."
         else
             echo "    ================================================================"
