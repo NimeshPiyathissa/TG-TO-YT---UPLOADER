@@ -11,16 +11,18 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from bot.config import settings
+from bot.ui import human_bytes, human_eta, human_rate
 from db.store import Store
 from web import auth
 from web.csrf import csrf_token
 from web.flash import flash, pop_flashes
+from web.live import job_view, row_progress
 
 log = structlog.get_logger(__name__)
 
@@ -37,6 +39,23 @@ def create_app(store: Store) -> FastAPI:
     templates.env.globals["current_user"] = auth.current_user
     templates.env.globals["oauth_mode"] = settings.oauth_mode
     templates.env.globals["project_audited"] = lambda: settings.project_audited
+
+    def asset(name: str) -> str:
+        # Cache-busting: the URL changes whenever the file does, so a deploy never
+        # leaves a browser on stale CSS/JS.
+        try:
+            version = int((BASE_DIR / "static" / name).stat().st_mtime)
+        except OSError:
+            version = 0
+        return f"/static/{name}?v={version}"
+
+    templates.env.globals["asset"] = asset
+    templates.env.globals["job_view"] = job_view
+    templates.env.globals["row_progress"] = row_progress
+    templates.env.filters["hbytes"] = lambda n: human_bytes(n or 0)
+    templates.env.filters["hrate"] = lambda n: human_rate(n or 0)
+    templates.env.filters["heta"] = lambda s: human_eta(s) if s is not None else "—"
+    templates.env.filters["thousands"] = lambda n: f"{int(n or 0):,}"
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -53,9 +72,15 @@ def create_app(store: Store) -> FastAPI:
     async def require_login(request: Request, call_next):
         path = request.url.path
         if path not in PUBLIC_PATHS and not path.startswith("/static"):
+            # The live-update stream is fetched by EventSource, which can't follow a
+            # redirect to an HTML page -- answer it with a plain 401 instead.
             if auth.current_user(request) is None:
+                if path == "/events":
+                    return Response(status_code=401)
                 return RedirectResponse(f"/login?next={path}", status_code=303)
             if auth.must_enroll_totp(request) and not path.startswith(auth.ENROLLMENT_PATHS):
+                if path == "/events":
+                    return Response(status_code=401)
                 return RedirectResponse("/account/totp", status_code=303)
         return await call_next(request)
 
@@ -68,10 +93,10 @@ def create_app(store: Store) -> FastAPI:
         max_age=12 * 3600,
     )
 
-    from web.routes import account, channels, dashboard, jobs, logs, users, videos
+    from web.routes import account, channels, dashboard, events, jobs, logs, users, videos
     from web.routes import settings as settings_routes
 
-    for module in (dashboard, channels, users, jobs, videos, logs, settings_routes, account):
+    for module in (dashboard, events, channels, users, jobs, videos, logs, settings_routes, account):
         app.include_router(module.router)
 
     @app.get("/login")

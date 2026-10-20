@@ -1,29 +1,36 @@
-<table class="table">
+{% from "partials/_icons.html" import icon %}
+{#- Jobs table, shared by the dashboard's "Active jobs" and the Jobs page. Each row carries
+    data-* progress values so /static/live.js can animate its bar between server events. -#}
+<div class="table-wrap">
+<table class="table jobs-table">
   <thead><tr><th>ID</th><th>State</th><th>User</th><th>File</th><th>Size</th><th>Progress</th><th>Queued</th><th></th></tr></thead>
   <tbody>
   {% for j in jobs %}
-    <tr>
-      <td>#{{ j.id }}</td>
-      <td><span class="badge badge-{{ j.state|lower }}">{{ j.state }}</span></td>
-      <td>{{ j.tg_user_id }}</td>
-      <td>{{ j.file_name or "—" }}</td>
-      <td>{{ "%.1f"|format((j.size_bytes or 0) / 1048576) }} MB</td>
-      <td>
-        {% if j.size_bytes %}
-          {{ ((j.bytes_sent / j.size_bytes) * 100) | round(0, 'floor') | int }}%
+    {% set v = job_view(j) %}{% set pg = row_progress(v) %}
+    <tr data-job="{{ j.id }}" data-state="{{ j.state }}" data-pull="{{ v.pull }}" data-push="{{ v.push }}"
+        data-cur="{{ v.cur }}" data-total="{{ v.total }}" data-rate="{{ v.rate }}">
+      <td data-label="ID" class="num">#{{ j.id }}</td>
+      <td data-label="State"><span class="badge badge-{{ j.state|lower }}">{{ j.state|replace("_", " ") }}</span></td>
+      <td data-label="User" class="num">{{ j.tg_user_id }}</td>
+      <td data-label="File">{{ j.file_name or "—" }}</td>
+      <td data-label="Size" class="num">{{ "%.1f"|format((j.size_bytes or 0) / 1048576) }} MB</td>
+      <td data-label="Progress" class="pcell">
+        {% if j.size_bytes and (pg[0] or j.state in ("FAILED", "CANCELLED")) %}
+        <div class="pbar {{ 'is-done' if j.state == 'DONE' else '' }}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ (pg[1] * 100)|int }}"><i style="--p:{{ pg[1] }}"></i></div>
+        <div class="pct"><span data-f="pct">{{ (pg[1] * 100)|int }}%</span> <em data-f="leg">{{ pg[0] or "" }}</em></div>
         {% else %}—{% endif %}
       </td>
-      <td>{{ j.queued_at[:16] if j.queued_at else "—" }}</td>
-      <td>
+      <td data-label="Queued" class="num">{{ j.queued_at[:16] if j.queued_at else "—" }}</td>
+      <td class="actions">
         {% if j.state == "FAILED" %}
         <form method="post" action="/jobs/{{ j.id }}/retry" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <button type="submit" class="link-btn">Retry</button>
+          <button type="submit" class="btn btn-sm">{{ icon("redo") }}Retry</button>
         </form>
         {% elif j.state not in ("DONE", "CANCELLED") %}
         <form method="post" action="/jobs/{{ j.id }}/cancel" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <button type="submit" class="link-btn">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-danger">{{ icon("x") }}Cancel</button>
         </form>
         {% endif %}
       </td>
@@ -33,3 +40,4 @@
   {% endfor %}
   </tbody>
 </table>
+</div>

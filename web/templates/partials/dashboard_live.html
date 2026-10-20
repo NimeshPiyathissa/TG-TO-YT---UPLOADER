@@ -1,0 +1,91 @@
+{% from "partials/_icons.html" import icon %}
+{#- Everything on the dashboard that moves. Rendered on first load and re-fetched by htmx
+    (every 30s, immediately when the job set changes, and every 3s if the live stream is down).
+    data-* attributes are what /static/live.js reads to animate bars between server events. -#}
+{% set m = monitor %}
+{% if m %}
+{% set j = m.job %}{% set v = m.view %}
+<section class="monitor" aria-label="Job in flight"
+         data-job="{{ j.id }}" data-state="{{ j.state }}" data-pull="{{ v.pull }}" data-push="{{ v.push }}"
+         data-cur="{{ v.cur }}" data-total="{{ v.total }}" data-rate="{{ v.rate }}">
+  <div class="mon-head">
+    <span class="mon-tag"><span class="tally"></span>In flight · {{ in_flight }} job{{ "s" if in_flight != 1 else "" }}</span>
+    <span class="mon-meta">Job #{{ j.id }} · attempt {{ j.attempts }}</span>
+  </div>
+  <h2 class="job-title">{{ j.title or j.file_name or "Untitled" }}</h2>
+  <div class="job-sub">{{ (j.size_bytes or 0)|hbytes }}{% if j.channel_pk and channel_titles.get(j.channel_pk) %} · to {{ channel_titles[j.channel_pk] }}{% endif %} · from {{ j.tg_user_id }}</div>
+
+  <div class="route">
+    <span class="node on">{{ icon("tg") }}</span>
+    <div class="leg" data-f="pull" style="--p:{{ v.pull }};--h:{{ 1 if 0 < v.pull < 1 else 0 }}"><div class="fill"></div><div class="head"></div></div>
+    <span class="node {{ 'on' if v.pull >= 1 else '' }}" data-f="n2">{{ icon("srv") }}</span>
+    <div class="leg" data-f="push" style="--p:{{ v.push }};--h:{{ 1 if 0 < v.push < 1 else 0 }}"><div class="fill"></div><div class="head"></div></div>
+    <span class="node {{ 'on' if v.push > 0 else '' }}" data-f="n3">{{ icon("yt") }}</span>
+  </div>
+  <div class="legs-label">
+    <div><b data-f="pull-pct">{{ (v.pull * 100)|int }}%</b>Pull from Telegram</div>
+    <div><b data-f="push-pct">{{ (v.push * 100)|int }}%</b>Push to YouTube</div>
+  </div>
+  <div class="mon-foot">
+    <div class="mon-stats">
+      <span><strong data-f="rate">{{ v.rate|hrate if v.rate else "—" }}</strong></span>
+      <span><strong data-f="eta">{{ v.eta|heta }}</strong> left</span>
+      <span><strong data-f="amt">{{ v.cur|hbytes }} / {{ v.total|hbytes }}</strong></span>
+    </div>
+    <form method="post" action="/jobs/{{ j.id }}/cancel" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <button type="submit" class="btn btn-sm">{{ icon("x") }}Cancel job</button>
+    </form>
+  </div>
+</section>
+{% else %}
+<section class="monitor is-idle" aria-label="No job in flight">
+  <div class="mon-head"><span class="mon-tag"><span class="tally"></span>Idle</span></div>
+  <p class="mon-idle">
+    {% if waiting %}Nothing is moving right now. {{ waiting }} job{{ "s are" if waiting != 1 else " is" }} waiting for a channel, a caption or a free slot.
+    {% else %}Nothing is moving right now. Send a video to the bot and it will show up here.{% endif %}
+  </p>
+</section>
+{% endif %}
+
+<div class="dash-grid">
+  <section class="panel span-7">
+    <h2>Pipeline</h2>
+    <div class="strip" role="img" aria-label="Job pipeline: {{ pipeline|map(attribute='label')|join(', ') }}">
+      {% for band in pipeline %}{% if band.count > 0 %}
+      <i class="pipeline-seg--{{ band.key }}" style="width: {{ band.pct }}%" title="{{ band.label }}: {{ band.count }}"></i>
+      {% endif %}{% endfor %}
+      {% if pipeline_total == 0 %}<i class="pipeline-seg--empty" style="width:100%"></i>{% endif %}
+    </div>
+    <div class="legend">
+      {% for band in pipeline %}
+      <span><i class="dot dot--{{ band.key }}"></i>{{ band.label }}<b>{{ band.count }}</b></span>
+      {% endfor %}
+    </div>
+    <div class="mini" style="margin-top:22px">
+      <div><span>Linked channels</span><b>{{ channels }}</b></div>
+      <div><span>Disk free (jobs volume)</span><b>{{ "%.1f"|format(disk_free_gb) if disk_free_gb is not none else "?" }} GB</b></div>
+      <div><span>Jobs tracked</span><b>{{ pipeline_total }}</b></div>
+    </div>
+  </section>
+
+  <section class="panel span-5">
+    <h2>Shared quota</h2>
+    <div class="gauges">
+      <div class="ring" role="img" aria-label="Shared quota used {{ general_used }} of {{ general_limit }}">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42" stroke-dasharray="{{ ring_dash }} 999"/></svg>
+        <div class="ring-c"><b>{{ general_used|thousands }}</b><span>of {{ general_limit|thousands }}</span></div>
+      </div>
+      <div class="g-note">
+        <strong>Shared quota used</strong>One pool for every linked channel: quota belongs to the Google Cloud project, not to a channel.
+        <div class="mini">
+          <div><span>Uploads today</span><b>{{ uploads_today }} / {{ uploads_bucket_limit }} · {{ uploads_remaining }} left</b></div>
+          <div><span>Search quota used</span><b>{{ search_used }} / {{ search_limit }}</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<h2>Active jobs</h2>
+{% include "partials/job_rows.html" %}

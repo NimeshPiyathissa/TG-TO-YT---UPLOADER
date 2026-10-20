@@ -1,17 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Login — TG→YT Uploader{% endblock %}
+{% block title %}Log in — TG→YT Uploader{% endblock %}
 {% block guest_content %}
+{% from "partials/_icons.html" import icon %}
 <div class="login-wrap">
   <form method="post" action="/login" class="login-card">
-    <span class="eyebrow">Control room</span>
-    <h1>🎬 TG→YT Uploader</h1>
-    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    <div class="login-brand"><span class="tally"></span>TG→YT</div>
+    <div class="login-route" aria-hidden="true">
+      <span class="n">{{ icon("tg") }}</span><span class="l"></span><span class="n">{{ icon("srv") }}</span><span class="l"></span><span class="n">{{ icon("yt") }}</span>
+    </div>
+    <h1>Log in</h1>
+    <p class="lede">Manage the Telegram-to-YouTube uploader.</p>
+    {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
     <label>Username
-      <input type="text" name="username" value="{{ username or '' }}" autofocus required>
+      <input type="text" name="username" value="{{ username or '' }}" autocomplete="username" autofocus required>
     </label>
     <label>Password
-      <input type="password" name="password" required>
+      <input type="password" name="password" autocomplete="current-password" required>
     </label>
     {% if needs_totp %}
     <label>Authentication code

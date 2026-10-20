@@ -24,7 +24,7 @@ import structlog
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot import flow
+from bot import flow, progress_hub
 from bot.config import settings
 from bot.downloader import DownloadTooLarge, InsufficientDisk, cleanup_job_dir, download_job, retry_target
 from bot.ui import ProgressReporter, human_bytes, human_elapsed
@@ -246,6 +246,7 @@ class JobQueue:
             await self._fail(job_id, "Download failed unexpectedly. Try sending it again.")
         finally:
             hb.cancel()
+            progress_hub.clear(job_id)
             if reporter:
                 await reporter.stop()
             await self.store.release_lease(job_id)
@@ -324,6 +325,7 @@ class JobQueue:
                         # Real forward progress: earlier failures were recoverable, so
                         # they shouldn't count against the retry budget any more.
                         await self.store.update_job_fields(job_id, attempts=0)
+                progress_hub.record(job_id, "upload", current, total)
                 elapsed = human_elapsed(time.monotonic() - upload_started)
                 reporter.update(
                     "upload", current, total,
@@ -380,6 +382,7 @@ class JobQueue:
             await self._retry_or_fail(job_id, "Upload failed unexpectedly.")
         finally:
             hb.cancel()
+            progress_hub.clear(job_id)
             if reporter:
                 await reporter.stop()
             if not delayed:

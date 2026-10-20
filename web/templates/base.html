@@ -3,33 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F1EF">
 <title>{% block title %}TG→YT Uploader{% endblock %}</title>
-<link rel="stylesheet" href="/static/style.css">
-<script src="/static/htmx.min.js"></script>
+<link rel="preload" href="/static/fonts/bricolage-grotesque-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/instrument-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+<script src="/static/htmx.min.js" defer></script>
+<script src="{{ asset('app.js') }}" defer></script>
+{% block head_scripts %}{% endblock %}
 </head>
 <body>
+{% from "partials/_icons.html" import icon, sprite %}
+{{ sprite() }}
 {% set user = current_user(request) %}
+{% set path = request.url.path %}
 {% if user %}
 <div class="shell">
-  <button class="nav-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰ Menu</button>
-  <nav class="sidebar">
-    <div class="brand">🎬 TG→YT</div>
-    <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">📊 Dashboard</a>
-    <a href="/channels" class="{{ 'active' if request.url.path.startswith('/channels') else '' }}">📺 Channels</a>
-    <a href="/users" class="{{ 'active' if request.url.path == '/users' else '' }}">👤 Users</a>
-    <a href="/jobs" class="{{ 'active' if request.url.path == '/jobs' else '' }}">⚡ Jobs</a>
-    <a href="/videos" class="{{ 'active' if request.url.path == '/videos' else '' }}">🎞 Videos</a>
-    <a href="/logs" class="{{ 'active' if request.url.path == '/logs' else '' }}">📜 Logs</a>
-    <a href="/settings" class="{{ 'active' if request.url.path == '/settings' else '' }}">⚙️ Settings</a>
-    <a href="/account/totp" class="{{ 'active' if request.url.path.startswith('/account') else '' }}">🔐 Two-factor</a>
+  <nav class="sidebar" aria-label="Main">
+    <a href="/" class="brand"><span class="tally"></span><b>TG→YT</b></a>
+    <a href="/" class="nav {{ 'active' if path == '/' else '' }}" title="Dashboard">{{ icon("dash") }}<span class="lbl">Dashboard</span></a>
+    <a href="/channels" class="nav {{ 'active' if path.startswith('/channels') else '' }}" title="Channels">{{ icon("chan") }}<span class="lbl">Channels</span></a>
+    <a href="/users" class="nav {{ 'active' if path == '/users' else '' }}" title="Users">{{ icon("users") }}<span class="lbl">Users</span></a>
+    <a href="/jobs" class="nav {{ 'active' if path == '/jobs' else '' }}" title="Jobs">{{ icon("jobs") }}<span class="lbl">Jobs</span></a>
+    <a href="/videos" class="nav {{ 'active' if path == '/videos' else '' }}" title="Videos">{{ icon("vid") }}<span class="lbl">Videos</span></a>
+    <a href="/logs" class="nav {{ 'active' if path == '/logs' else '' }}" title="Logs">{{ icon("logs") }}<span class="lbl">Logs</span></a>
+    <a href="/settings" class="nav {{ 'active' if path == '/settings' else '' }}" title="Settings">{{ icon("set") }}<span class="lbl">Settings</span></a>
+    <a href="/account/totp" class="nav {{ 'active' if path.startswith('/account') else '' }}" title="Two-factor">{{ icon("key") }}<span class="lbl">Two-factor</span></a>
+    <div class="grow"></div>
+    <div class="who">Signed in as {{ user.username }}</div>
     <form method="post" action="/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-      <button type="submit" class="link-btn">🚪 Logout ({{ user.username }})</button>
+      <button type="submit" class="link-btn" title="Log out">{{ icon("out") }}<span class="lbl">Log out</span></button>
     </form>
   </nav>
-  <main class="content">
+
+  <main class="content" id="main">
     {% if not project_audited() %}
-    <div class="banner banner-warn">⚠️ This API project hasn't passed Google's compliance audit yet — every upload lands Private.</div>
+    <div class="banner banner-warn">{{ icon("warn") }}<span>This API project hasn't passed Google's compliance audit yet — every upload lands Private.</span></div>
     {% endif %}
     {% block flashes %}
     {% if flashes %}
@@ -40,6 +50,25 @@
     {% endblock %}
     {% block content %}{% endblock %}
   </main>
+</div>
+
+<nav class="tabbar" aria-label="Main">
+  <a href="/" class="{{ 'active' if path == '/' else '' }}">{{ icon("dash") }}Home</a>
+  <a href="/jobs" class="{{ 'active' if path == '/jobs' else '' }}">{{ icon("jobs") }}Jobs</a>
+  <a href="/videos" class="{{ 'active' if path == '/videos' else '' }}">{{ icon("vid") }}Videos</a>
+  <a href="/channels" class="{{ 'active' if path.startswith('/channels') else '' }}">{{ icon("chan") }}Channels</a>
+  <button type="button" id="more-btn" aria-expanded="false" aria-controls="more-sheet">{{ icon("more") }}More</button>
+</nav>
+<div class="sheet" id="more-sheet" aria-label="More pages">
+  <a href="/users" class="{{ 'active' if path == '/users' else '' }}">{{ icon("users") }}Users</a>
+  <a href="/logs" class="{{ 'active' if path == '/logs' else '' }}">{{ icon("logs") }}Logs</a>
+  <a href="/settings" class="{{ 'active' if path == '/settings' else '' }}">{{ icon("set") }}Settings</a>
+  <a href="/account/totp" class="{{ 'active' if path.startswith('/account') else '' }}">{{ icon("key") }}Two-factor</a>
+  <div class="who">Signed in as {{ user.username }}</div>
+  <form method="post" action="/logout" class="logout-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="link-btn">{{ icon("out") }}Log out</button>
+  </form>
 </div>
 {% else %}
 {% block guest_content %}{% endblock %}

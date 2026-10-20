@@ -16,6 +16,7 @@ from typing import Optional
 import pyrogram
 import structlog
 
+from bot import progress_hub
 from bot.config import settings
 from bot.ui import ProgressReporter
 from db.store import Store
@@ -143,6 +144,7 @@ async def download_job(
     try:
         def _progress_cb(current: int, total: int) -> None:
             progress.update("download", current, total or size)
+            progress_hub.record(job_id, "download", current, total or size)
 
         if can_download_without_relay(size):
             message = await bot_client.get_messages(job.source_chat_id, job.source_message_id)

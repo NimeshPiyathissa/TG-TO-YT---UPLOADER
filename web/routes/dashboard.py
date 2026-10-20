@@ -8,11 +8,15 @@ from fastapi import APIRouter, Request
 
 from bot.config import settings
 from web.flash import pop_flashes
+from web.live import MOVING_STATES, job_view, row_progress
 from yt.quota import BUCKET_LIMITS, remaining
 
 router = APIRouter()
 
 _PROCESS_STARTED_AT = time.monotonic()
+
+
+RING_CIRCUMFERENCE = 263.89  # 2 * pi * r, with r = 42 in the quota ring's SVG
 
 
 def _uptime_str() -> str:
@@ -61,7 +65,22 @@ async def _dashboard_context(request: Request) -> dict:
         disk_free_gb = disk.free / 1024**3
     except OSError:
         disk_free_gb = None
+    channel_titles = {c["id"]: c["channel_title"] for c in await store.list_yt_channels(include_revoked=True)}
+    rows = []
+    for job in active_jobs:
+        view = job_view(job)
+        label, frac = row_progress(view)
+        rows.append({"job": job, "view": view, "label": label, "frac": frac})
+    monitor = next((r for r in rows if r["job"].state in MOVING_STATES), None)
+    general_used = quota_summary.get("general", 0)
     return {
+        "rows": rows,
+        "channel_titles": channel_titles,
+        "monitor": monitor,
+        "in_flight": sum(1 for r in rows if r["job"].state in MOVING_STATES),
+        "waiting": sum(1 for r in rows if r["job"].state not in MOVING_STATES),
+        "uptime_s": int(time.monotonic() - _PROCESS_STARTED_AT),
+        "ring_dash": round(min(1.0, general_used / BUCKET_LIMITS["general"]) * RING_CIRCUMFERENCE, 2),
         "channels": channels,
         "uploads_today": uploads_today,
         "uploads_bucket_limit": BUCKET_LIMITS["uploads"],
@@ -90,6 +109,5 @@ async def dashboard(request: Request):
 @router.get("/partials/dashboard-jobs")
 async def dashboard_jobs_partial(request: Request):
     templates = request.app.state.templates
-    store = request.app.state.store
-    active_jobs = await store.list_active_jobs()
-    return templates.TemplateResponse(request, "partials/job_rows.html", {"jobs": active_jobs})
+    ctx = await _dashboard_context(request)
+    return templates.TemplateResponse(request, "partials/dashboard_live.html", ctx)
