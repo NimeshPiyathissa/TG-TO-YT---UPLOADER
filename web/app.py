@@ -55,7 +55,14 @@ def create_app(store: Store) -> FastAPI:
     templates.env.filters["hbytes"] = lambda n: human_bytes(n or 0)
     templates.env.filters["hrate"] = lambda n: human_rate(n or 0)
     templates.env.filters["heta"] = lambda s: human_eta(s) if s is not None else "—"
-    templates.env.filters["thousands"] = lambda n: f"{int(n or 0):,}"
+    def hms(seconds) -> str:
+        s = max(int(seconds or 0), 0)
+        h, rem = divmod(s, 3600)
+        m, sec = divmod(rem, 60)
+        return f"{h}:{m:02d}:{sec:02d}"
+
+    templates.env.filters["hms"] = hms
+    templates.env.filters["thousands"] =lambda n: f"{int(n or 0):,}"
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

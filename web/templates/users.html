@@ -1,72 +1,95 @@
 {% extends "base.html" %}
 {% block title %}Users — TG→YT Uploader{% endblock %}
 {% block content %}
-<h1>Telegram access</h1>
+{% from "partials/_icons.html" import icon %}
+<div class="page-header">
+  <div>
+    <h1>Telegram access</h1>
+    <div class="sub">Who can send videos to the bot</div>
+  </div>
+</div>
 
-<div class="panel">
+<div class="panel" style="margin-bottom:16px">
   <h2>Grant access</h2>
-  <form method="post" action="/users/add" class="inline-form">
+  <form method="post" action="/users/add" class="grant-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-    <input type="number" name="tg_user_id" placeholder="Telegram numeric ID" required>
-    <select name="role">
-      <option value="uploader">uploader</option>
-      <option value="admin">admin</option>
-    </select>
-    <button type="submit" class="btn btn-primary">Grant</button>
+    <label>Telegram numeric ID
+      <input type="number" name="tg_user_id" placeholder="e.g. 123456789" required>
+    </label>
+    <label class="sm">Role
+      <select name="role">
+        <option value="uploader">uploader</option>
+        <option value="admin">admin</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary">{{ icon("plus") }}Grant access</button>
   </form>
 </div>
 
-<table class="table">
-  <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Uploads</th><th>Last seen</th><th>Actions</th></tr></thead>
-  <tbody>
-  {% for u in tg_users %}
-    <tr>
-      <td>{{ u.tg_user_id }}</td>
-      <td>{{ u.username or "—" }}</td>
-      <td>{{ u.role }}</td>
-      <td>{{ u.uploads_count }}</td>
-      <td>{{ u.last_seen_at[:16] if u.last_seen_at else "—" }}</td>
-      <td>
-        <form method="post" action="/users/{{ u.tg_user_id }}/role" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <select name="role" onchange="this.form.requestSubmit()">
-            {% for r in ("owner", "admin", "uploader", "blocked") %}
-            <option value="{{ r }}" {{ "selected" if u.role == r else "" }}>{{ r }}</option>
-            {% endfor %}
-          </select>
-        </form>
-        <form method="post" action="/users/{{ u.tg_user_id }}/block" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <button type="submit" class="link-btn link-btn-danger">Block</button>
-        </form>
-      </td>
-    </tr>
-  {% else %}
-    <tr><td colspan="6" class="empty">No known Telegram users yet.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="users-split">
+  <div>
+    <h2>Known users</h2>
+    <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Uploads</th><th>Last seen</th><th>Manage</th></tr></thead>
+      <tbody>
+      {% for u in tg_users %}
+        <tr>
+          <td data-label="ID" class="num">{{ u.tg_user_id }}</td>
+          <td data-label="Username">{{ u.username or "—" }}</td>
+          <td data-label="Role"><span class="role-badge role-{{ u.role }}">{{ u.role }}</span></td>
+          <td data-label="Uploads" class="num">{{ u.uploads_count }}</td>
+          <td data-label="Last seen" class="num nw">{{ u.last_seen_at[:16]|replace("T", " ") if u.last_seen_at else "—" }}</td>
+          <td data-label="Manage" class="actions">
+            <div class="row-actions">
+              <form method="post" action="/users/{{ u.tg_user_id }}/role" class="role-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <select name="role" class="role-select" aria-label="Role for {{ u.tg_user_id }}" onchange="this.form.requestSubmit()">
+                  {% for r in ("owner", "admin", "uploader", "blocked") %}
+                  <option value="{{ r }}" {{ "selected" if u.role == r else "" }}>{{ r }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+              <form method="post" action="/users/{{ u.tg_user_id }}/block" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <button type="submit" class="btn btn-sm btn-danger">Block</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">No known Telegram users yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
 
-<h2>Denied access attempts</h2>
-<table class="table">
-  <thead><tr><th>When</th><th>Telegram ID</th><th></th></tr></thead>
-  <tbody>
-  {% for d in denied %}
-    <tr>
-      <td>{{ d.ts[:16] }}</td>
-      <td>{{ d.actor_id }}</td>
-      <td>
-        <form method="post" action="/users/add" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <input type="hidden" name="tg_user_id" value="{{ d.actor_id }}">
-          <input type="hidden" name="role" value="uploader">
-          <button type="submit" class="link-btn">➕ Grant access</button>
-        </form>
-      </td>
-    </tr>
-  {% else %}
-    <tr><td colspan="3" class="empty">No denied attempts logged.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+  <div>
+    <h2>Denied access attempts</h2>
+    <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead><tr><th>When</th><th>Telegram ID</th><th></th></tr></thead>
+      <tbody>
+      {% for d in denied %}
+        <tr>
+          <td data-label="When" class="num nw">{{ d.ts[:16]|replace("T", " ") }}</td>
+          <td data-label="Telegram ID" class="num">{{ d.actor_id }}</td>
+          <td class="actions">
+            <form method="post" action="/users/add" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="tg_user_id" value="{{ d.actor_id }}">
+              <input type="hidden" name="role" value="uploader">
+              <button type="submit" class="btn btn-sm">{{ icon("plus") }}Grant</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="empty">No denied attempts logged.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
 {% endblock %}

@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#F2F1EF">
+<meta name="color-scheme" content="light dark">
+<script>
+/* Runs before first paint so the page never flashes the wrong theme. Pref: light | dark | system (default). */
+(function(){var r=document.documentElement,k="tgyt-theme",m=window.matchMedia("(prefers-color-scheme: dark)"),p;
+try{p=localStorage.getItem(k)}catch(e){}if(p!=="light"&&p!=="dark")p="system";
+function a(){var d=p==="dark"||(p==="system"&&m.matches);r.setAttribute("data-theme",d?"dark":"light");r.setAttribute("data-theme-pref",p);
+var t=document.querySelector('meta[name=theme-color]');if(t)t.setAttribute("content",d?"#110D0F":"#F2F1EF")}
+a();window.__setTheme=function(v){p=v;try{if(v==="system")localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}a();document.dispatchEvent(new Event("themechange"))};
+(m.addEventListener?m.addEventListener("change",a):m.addListener(a))})();
+</script>
 <title>{% block title %}TG→YT Uploader{% endblock %}</title>
 <link rel="preload" href="/static/fonts/bricolage-grotesque-800.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/fonts/instrument-sans-400.woff2" as="font" type="font/woff2" crossorigin>
@@ -13,7 +23,7 @@
 {% block head_scripts %}{% endblock %}
 </head>
 <body>
-{% from "partials/_icons.html" import icon, sprite %}
+{% from "partials/_icons.html" import icon, sprite, theme_switch %}
 {{ sprite() }}
 {% set user = current_user(request) %}
 {% set path = request.url.path %}
@@ -30,6 +40,7 @@
     <a href="/settings" class="nav {{ 'active' if path == '/settings' else '' }}" title="Settings">{{ icon("set") }}<span class="lbl">Settings</span></a>
     <a href="/account/totp" class="nav {{ 'active' if path.startswith('/account') else '' }}" title="Two-factor">{{ icon("key") }}<span class="lbl">Two-factor</span></a>
     <div class="grow"></div>
+    {{ theme_switch() }}
     <div class="who">Signed in as {{ user.username }}</div>
     <form method="post" action="/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
@@ -64,6 +75,7 @@
   <a href="/logs" class="{{ 'active' if path == '/logs' else '' }}">{{ icon("logs") }}Logs</a>
   <a href="/settings" class="{{ 'active' if path == '/settings' else '' }}">{{ icon("set") }}Settings</a>
   <a href="/account/totp" class="{{ 'active' if path.startswith('/account') else '' }}">{{ icon("key") }}Two-factor</a>
+  {{ theme_switch() }}
   <div class="who">Signed in as {{ user.username }}</div>
   <form method="post" action="/logout" class="logout-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
@@ -71,6 +83,7 @@
   </form>
 </div>
 {% else %}
+<div class="login-theme">{{ theme_switch() }}</div>
 {% block guest_content %}{% endblock %}
 {% endif %}
 </body>

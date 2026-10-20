@@ -1,10 +1,10 @@
 {% if channel %}
 <div class="confirm-box">
-  <p>⚠️ Remove <strong>{{ channel.channel_title }}</strong>? Videos already uploaded stay on YouTube.</p>
+  <p>Remove <strong>{{ channel.channel_title }}</strong>? Videos already uploaded stay on YouTube.</p>
   <form method="post" action="/channels/{{ channel.id }}/remove" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-    <button type="submit" class="btn btn-danger">✅ Yes, remove</button>
-    <button type="button" class="btn" onclick="this.closest('.confirm-box').remove()">❌ Cancel</button>
+    <button type="submit" class="btn btn-danger-solid">Yes, remove</button>
+    <button type="button" class="btn" onclick="this.closest('.confirm-box').remove()">Cancel</button>
   </form>
 </div>
 {% else %}

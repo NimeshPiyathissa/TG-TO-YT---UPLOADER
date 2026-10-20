@@ -1,18 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Channels — TG→YT Uploader{% endblock %}
 {% block content %}
+{% from "partials/_icons.html" import icon %}
 <div class="page-header">
-  <h1>Channels</h1>
-  <a href="/channels/add" class="btn btn-primary">➕ Link a channel</a>
+  <div>
+    <h1>Channels</h1>
+    <div class="sub">{{ channels|length }} linked · uploads go to the default channel unless a video is sent elsewhere</div>
+  </div>
+  <a href="/channels/add" class="btn btn-primary">{{ icon("plus") }}Link a channel</a>
 </div>
-<div class="card-grid">
+{% if channels %}
+<div class="channel-grid">
   {% for c in channels %}
   <div class="card channel-card">
-    {% if c.thumbnail_url %}<img src="{{ c.thumbnail_url }}" class="channel-thumb" alt="">{% endif %}
-    <div class="channel-title">{{ c.channel_title }} {% if c.is_default %}⭐{% endif %}</div>
-    <div class="channel-handle">{{ c.handle or "" }}</div>
-    <div>{{ status_label.get(c.status, c.status) }}</div>
-    <div class="card-sub">{{ c.uploads_count }} uploads · last used {{ c.last_used_at[:10] if c.last_used_at else "never" }}</div>
+    <div class="channel-top">
+      {% if c.thumbnail_url %}<img src="{{ c.thumbnail_url }}" class="channel-thumb" alt="">
+      {% else %}<span class="channel-initial" aria-hidden="true">{{ (c.channel_title or "?")[:1]|upper }}</span>{% endif %}
+      <div class="channel-id">
+        <div class="channel-title">{{ c.channel_title }}{% if c.is_default %} <span class="chip-default">{{ icon("star") }}Default</span>{% endif %}</div>
+        <div class="channel-handle">{{ c.handle or "No handle" }}</div>
+      </div>
+      <span class="badge badge-{{ c.status }} channel-status">{{ c.status|replace("_", " ") }}</span>
+    </div>
+    <div class="channel-stats">
+      <div><b>{{ c.uploads_count }}</b><span>Uploads</span></div>
+      <div><b>{{ c.last_used_at[:10] if c.last_used_at else "never" }}</b><span>Last used</span></div>
+    </div>
     <div class="card-actions">
       {% if not c.is_default %}
       <form method="post" action="/channels/{{ c.id }}/set-default" class="inline-form">
@@ -31,8 +44,15 @@
     </div>
     <div id="confirm-{{ c.id }}"></div>
   </div>
-  {% else %}
-  <p class="empty">No channels linked yet. <a href="/channels/add">Link one</a>.</p>
   {% endfor %}
+  <a href="/channels/add" class="channel-add">{{ icon("plus") }}<span>Link another channel</span></a>
 </div>
+{% else %}
+<div class="empty-state">
+  <span class="ico">{{ icon("chan") }}</span>
+  <h3>No channels linked yet</h3>
+  <p>Link a YouTube channel and anything sent to the bot can be uploaded to it.</p>
+  <a href="/channels/add" class="btn btn-primary">{{ icon("plus") }}Link a channel</a>
+</div>
+{% endif %}
 {% endblock %}

@@ -1,37 +1,39 @@
 {% extends "base.html" %}
 {% block title %}Videos — TG→YT Uploader{% endblock %}
 {% block content %}
-<h1>Videos</h1>
+{% from "partials/_icons.html" import icon %}
+<div class="page-header">
+  <div>
+    <h1>Videos</h1>
+    <div class="sub">Everything uploaded through the bot, newest first</div>
+  </div>
+</div>
 <form method="get" action="/videos" class="filter-bar">
-  <input type="text" name="q" placeholder="Search title…" value="{{ q }}">
-  <select name="channel_pk" onchange="this.form.requestSubmit()">
+  <input type="text" name="q" placeholder="Search title…" value="{{ q }}" aria-label="Search title">
+  <select name="channel_pk" onchange="this.form.requestSubmit()" aria-label="Channel">
     <option value="">All channels</option>
     {% for c in channels %}
     <option value="{{ c.id }}" {{ "selected" if filter_channel_pk == c.id else "" }}>{{ c.channel_title }}</option>
     {% endfor %}
   </select>
-  <button type="submit" class="btn">Search</button>
+  <button type="submit" class="btn">{{ icon("search") }}Search</button>
 </form>
 
+<div class="table-wrap">
 <table class="table">
   <thead><tr><th>Title</th><th>Channel</th><th>Uploader</th><th>Size</th><th>Duration</th><th>Privacy</th><th>Uploaded</th><th></th></tr></thead>
   <tbody>
   {% for v in videos %}
     <tr>
-      <td><a href="https://youtu.be/{{ v.video_id }}" target="_blank" rel="noopener">{{ v.title or v.video_id }}</a></td>
-      <td>{{ channel_titles.get(v.channel_pk, "—") }}</td>
-      <td>{{ v.uploaded_by }}</td>
-      <td>{{ "%.1f"|format((v.size_bytes or 0) / 1048576) }} MB</td>
-      <td>{{ (v.duration_s or 0) | int }}s</td>
-      <td>{{ v.privacy_actual }}</td>
-      <td>{{ v.uploaded_at[:16] }}</td>
-      <td>
-        <form method="post" action="/videos/{{ v.video_id }}/delete" class="inline-form"
-              onsubmit="return confirm('Type DELETE to confirm removal.');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <input type="text" name="confirm" placeholder="type DELETE" size="8">
-          <button type="submit" class="link-btn link-btn-danger">🗑 Delete</button>
-        </form>
+      <td data-label="Title" class="title-cell"><a class="vtitle" href="https://youtu.be/{{ v.video_id }}" target="_blank" rel="noopener" title="{{ v.title or v.video_id }}">{{ v.title or v.video_id }}</a></td>
+      <td data-label="Channel" class="nw chan-cell" title="{{ channel_titles.get(v.channel_pk, "") }}">{{ channel_titles.get(v.channel_pk, "—") }}</td>
+      <td data-label="Uploader" class="num">{{ v.uploaded_by }}</td>
+      <td data-label="Size" class="num nw">{{ "%.1f"|format((v.size_bytes or 0) / 1048576) }} MB</td>
+      <td data-label="Duration" class="num nw">{{ v.duration_s | hms }}</td>
+      <td data-label="Privacy"><span class="tag tag-{{ v.privacy_actual }}">{{ v.privacy_actual }}</span></td>
+      <td data-label="Uploaded" class="num nw">{{ v.uploaded_at[:16]|replace("T", " ") }}</td>
+      <td class="actions">
+        <button type="button" class="btn btn-sm btn-danger" data-delete-video="{{ v.video_id }}" data-title="{{ v.title or v.video_id }}">{{ icon("trash") }}Delete</button>
       </td>
     </tr>
   {% else %}
@@ -39,4 +41,20 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
+
+<dialog class="confirm" id="delete-dialog" aria-labelledby="del-h">
+  <form method="post" action="" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <h3 id="del-h">Delete this video?</h3>
+    <p class="card-sub"><span class="target"></span><br>It is removed from YouTube and marked deleted here. This can't be undone.</p>
+    <label>Type DELETE to confirm
+      <input type="text" name="confirm" placeholder="DELETE" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-cancel>Cancel</button>
+      <button type="submit" class="btn btn-danger-solid" data-go disabled>{{ icon("trash") }}Delete video</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}

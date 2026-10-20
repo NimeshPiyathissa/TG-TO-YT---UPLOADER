@@ -1,15 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Jobs — TG→YT Uploader{% endblock %}
 {% block content %}
-<h1>Jobs</h1>
+<div class="page-header">
+  <div>
+    <h1>Jobs</h1>
+    <div class="sub">Every transfer, from queued to done</div>
+  </div>
+</div>
 <form method="get" action="/jobs" class="filter-bar">
-  <select name="state" onchange="this.form.requestSubmit()">
+  <select name="state" onchange="this.form.requestSubmit()" aria-label="State">
     <option value="">All states</option>
     {% for s in all_states %}
     <option value="{{ s }}" {{ "selected" if filter_state == s else "" }}>{{ s }}</option>
     {% endfor %}
   </select>
-  <select name="channel_pk" onchange="this.form.requestSubmit()">
+  <select name="channel_pk" onchange="this.form.requestSubmit()" aria-label="Channel">
     <option value="">All channels</option>
     {% for c in channels %}
     <option value="{{ c.id }}" {{ "selected" if filter_channel_pk == c.id else "" }}>{{ c.channel_title }}</option>

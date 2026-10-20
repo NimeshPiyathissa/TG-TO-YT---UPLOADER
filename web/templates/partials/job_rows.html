@@ -12,7 +12,7 @@
       <td data-label="ID" class="num">#{{ j.id }}</td>
       <td data-label="State"><span class="badge badge-{{ j.state|lower }}">{{ j.state|replace("_", " ") }}</span></td>
       <td data-label="User" class="num">{{ j.tg_user_id }}</td>
-      <td data-label="File">{{ j.file_name or "—" }}</td>
+      <td data-label="File" class="fname">{{ j.file_name or "—" }}</td>
       <td data-label="Size" class="num">{{ "%.1f"|format((j.size_bytes or 0) / 1048576) }} MB</td>
       <td data-label="Progress" class="pcell">
         {% if j.size_bytes and (pg[0] or j.state in ("FAILED", "CANCELLED")) %}
