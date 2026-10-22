@@ -64,7 +64,7 @@ def main() -> None:
 
     print("Opening your browser to sign in and approve access...")
     flow = InstalledAppFlow.from_client_secrets_file(str(path), scopes=SCOPES)
-    credentials = flow.run_local_server(port=0)
+    credentials = flow.run_local_server(port=0, prompt="select_account consent")
 
     out_path = Path.cwd() / "token.json"
     out_path.write_text(credentials.to_json(), encoding="utf-8")

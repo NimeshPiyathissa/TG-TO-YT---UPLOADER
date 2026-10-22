@@ -253,22 +253,33 @@ class JobQueue:
             await self.store.release_lease(job_id)
 
     async def _post_channel_or_caption_prompt(self, job: Job) -> None:
-        channels = await self.store.list_yt_channels()
-        if len(channels) == 1:
-            channel = channels[0]
+        # Read fresh from the DB for every job, so a channel linked in the panel shows up with no restart.
+        active, needs_reauth = flow.split_channels(await self.store.list_yt_channels())
+        note = flow.reauth_note(needs_reauth)
+        if len(active) == 1:
+            channel = active[0]
             await self.store.update_job_fields(job.id, channel_pk=channel["id"])
             job = await self.store.transition_job(job.id, "AWAITING_CAPTION")
             await self.store.save_flow_session(job.tg_user_id, job.id, "awaiting_caption", {})
+            which = "only active" if needs_reauth else "only linked"
             text = (
-                f"✅ Auto-selected your only linked channel: {b(channel['channel_title'])}\n\n"
+                f"✅ Auto-selected your {which} channel: {b(channel['channel_title'])}{note}\n\n"
                 + flow.caption_prompt_text(channel["channel_title"])
             )
             kb = flow.caption_prompt_keyboard(job.id, single_channel=True)
+        elif not active:
+            await self.store.save_flow_session(job.tg_user_id, job.id, "awaiting_channel", {})
+            text = (
+                "🚫 <b>No channel can take this upload right now.</b>"
+                + (note or "\n\nNo channels are linked yet.")
+                + "\n\nRelink in the web panel, then send the video again."
+            )
+            kb = flow.channel_picker_keyboard([], job.id)  # Cancel only
         else:
             await self.store.save_flow_session(job.tg_user_id, job.id, "awaiting_channel", {})
             text = flow.channel_picker_text(job.file_name or "video", job.size_bytes or 0,
-                                             job.duration_s, job.width, job.height)
-            kb = flow.channel_picker_keyboard(channels, job.id)
+                                             job.duration_s, job.width, job.height, note=note)
+            kb = flow.channel_picker_keyboard(active, job.id)
         try:
             await self.bot.edit_message_text(job.chat_id, job.status_message_id, text,
                                               parse_mode=ParseMode.HTML, reply_markup=kb)

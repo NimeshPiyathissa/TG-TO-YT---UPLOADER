@@ -34,8 +34,23 @@ def validate_caption(raw_text: str) -> tuple[str, str]:
     return title, description
 
 
+def split_channels(channels: list) -> tuple[list, list]:
+    """(usable, needs_reauth): only active channels can receive an upload."""
+    return ([c for c in channels if c["status"] == "active"],
+            [c for c in channels if c["status"] == "needs_reauth"])
+
+
+def reauth_note(needs_reauth: list) -> str:
+    """Tell the user which channels were left out of the picker and why ('' if none)."""
+    if not needs_reauth:
+        return ""
+    names = ", ".join(esc(c["channel_title"]) for c in needs_reauth)
+    return ("\n\n⚠️ <b>Skipped (needs re-authorization):</b> " + names + "\n"
+            "An admin can relink them in the web panel under Channels.")
+
+
 def channel_picker_text(file_name: str, size_bytes: int, duration_s: float | None,
-                         width: int | None, height: int | None) -> str:
+                         width: int | None, height: int | None, note: str = "") -> str:
     from bot.ui import human_bytes
 
     dims = f"{width}×{height}" if width and height else "unknown"
@@ -44,12 +59,13 @@ def channel_picker_text(file_name: str, size_bytes: int, duration_s: float | Non
         f"✅ <b>Video received</b> — <code>{esc(file_name)}</code>\n"
         f"📦 {human_bytes(size_bytes)} · ⏱ {dur} · {dims}\n\n"
         f"📺 <b>Where should this go?</b>"
+        f"{note}"
     )
 
 
 def channel_picker_keyboard(channels: list, job_id: int) -> InlineKeyboardMarkup:
     rows = []
-    for ch in channels:
+    for ch in sorted(channels, key=lambda c: not c["is_default"]):  # default channel first, rest keep order
         star = "⭐ " if ch["is_default"] else ""
         rows.append([InlineKeyboardButton(f"📺 {star}{ch['channel_title']}", callback_data=f"pickch:{job_id}:{ch['id']}")])
     rows.append([InlineKeyboardButton("❌ Cancel", callback_data=f"canceljob:{job_id}")])

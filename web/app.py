@@ -182,7 +182,9 @@ def create_app(store: Store) -> FastAPI:
         user = auth.current_user(request)
         await store.write_audit("app_user", user["username"] if user else None, "channel_linked",
                                  target=channel["channel_title"])
-        flash(request, f"Linked channel: {channel['channel_title']}", "success")
+        from web.routes.channels import link_result_message
+
+        flash(request, link_result_message(channel), "info" if channel["already_linked"] else "success")
         return RedirectResponse("/channels", status_code=303)
 
     return app

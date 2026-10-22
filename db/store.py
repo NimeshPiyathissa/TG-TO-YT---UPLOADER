@@ -118,7 +118,16 @@ class Store:
         await self._conn.execute("PRAGMA busy_timeout=5000")
         schema_path = Path(__file__).parent / "schema.sql"
         await self._conn.executescript(schema_path.read_text())
+        await self._migrate()
         await self._conn.commit()
+
+    async def _migrate(self) -> None:
+        """Additive column changes for databases created before the column existed
+        (schema.sql only has CREATE TABLE IF NOT EXISTS, which never alters a table)."""
+        cur = await self._conn.execute("PRAGMA table_info(yt_channels)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        if "display_label" not in columns:
+            await self._conn.execute("ALTER TABLE yt_channels ADD COLUMN display_label TEXT")
 
     async def close(self) -> None:
         if self._conn:
@@ -340,31 +349,52 @@ class Store:
         await self.conn.commit()
         return cur.lastrowid
 
+    # channel_title = the operator's label when set, else Google's title; youtube_title is always Google's.
+    _CHANNEL_SELECT = (
+        "SELECT id, channel_id, COALESCE(NULLIF(display_label, ''), channel_title) AS channel_title, "
+        "channel_title AS youtube_title, display_label, handle, thumbnail_url, refresh_token_enc, "
+        "access_token_enc, access_expires_at, scopes, status, is_default, added_at, added_by, "
+        "last_used_at, uploads_count FROM yt_channels"
+    )
+
     async def list_yt_channels(self, include_revoked: bool = False) -> list[aiosqlite.Row]:
-        if include_revoked:
-            cur = await self.conn.execute("SELECT * FROM yt_channels ORDER BY id")
-        else:
-            cur = await self.conn.execute("SELECT * FROM yt_channels WHERE status != 'revoked' ORDER BY id")
+        where = "" if include_revoked else " WHERE status != 'revoked'"
+        cur = await self.conn.execute(f"{self._CHANNEL_SELECT}{where} ORDER BY id")
         return list(await cur.fetchall())
 
     async def get_yt_channel(self, channel_pk: int) -> Optional[aiosqlite.Row]:
-        cur = await self.conn.execute("SELECT * FROM yt_channels WHERE id = ?", (channel_pk,))
+        cur = await self.conn.execute(f"{self._CHANNEL_SELECT} WHERE id = ?", (channel_pk,))
+        return await cur.fetchone()
+
+    async def get_yt_channel_by_channel_id(self, channel_id: str) -> Optional[aiosqlite.Row]:
+        cur = await self.conn.execute(f"{self._CHANNEL_SELECT} WHERE channel_id = ?", (channel_id,))
         return await cur.fetchone()
 
     async def get_default_channel(self) -> Optional[aiosqlite.Row]:
-        cur = await self.conn.execute(
-            "SELECT * FROM yt_channels WHERE status = 'active' AND is_default = 1 LIMIT 1"
-        )
+        cur = await self.conn.execute(f"{self._CHANNEL_SELECT} WHERE status = 'active' AND is_default = 1 LIMIT 1")
         row = await cur.fetchone()
         if row:
             return row
-        cur = await self.conn.execute("SELECT * FROM yt_channels WHERE status = 'active' ORDER BY id LIMIT 1")
+        cur = await self.conn.execute(f"{self._CHANNEL_SELECT} WHERE status = 'active' ORDER BY id LIMIT 1")
         return await cur.fetchone()
 
-    async def set_default_channel(self, channel_pk: int) -> None:
+    async def set_default_channel(self, channel_pk: int) -> bool:
+        """Make an active channel the single default. Returns False (changing nothing) if it
+        doesn't exist or isn't active, so a broken channel can't become the default."""
+        cur = await self.conn.execute("SELECT 1 FROM yt_channels WHERE id = ? AND status = 'active'", (channel_pk,))
+        if await cur.fetchone() is None:
+            return False
         await self.conn.execute("UPDATE yt_channels SET is_default = 0")
         await self.conn.execute("UPDATE yt_channels SET is_default = 1 WHERE id = ?", (channel_pk,))
         await self.conn.commit()
+        return True
+
+    async def set_channel_label(self, channel_pk: int, label: Optional[str]) -> bool:
+        """Set (or clear, with an empty label) the display name used in the bot and panel."""
+        label = (label or "").strip()[:60] or None
+        cur = await self.conn.execute("UPDATE yt_channels SET display_label = ? WHERE id = ?", (label, channel_pk))
+        await self.conn.commit()
+        return cur.rowcount > 0
 
     async def update_channel_tokens(self, channel_pk: int, access_token_enc: bytes, access_expires_at: str,
                                      refresh_token_enc: Optional[bytes] = None) -> None:
@@ -394,7 +424,15 @@ class Store:
         await self.conn.commit()
 
     async def delete_channel(self, channel_pk: int) -> None:
+        cur = await self.conn.execute("SELECT is_default FROM yt_channels WHERE id = ?", (channel_pk,))
+        row = await cur.fetchone()
         await self.conn.execute("DELETE FROM yt_channels WHERE id = ?", (channel_pk,))
+        if row and row["is_default"]:
+            # Never leave the install with no default: promote the oldest remaining active channel.
+            await self.conn.execute(
+                """UPDATE yt_channels SET is_default = 1 WHERE id = (
+                       SELECT id FROM yt_channels WHERE status = 'active' ORDER BY id LIMIT 1)"""
+            )
         await self.conn.commit()
 
     # -- jobs -------------------------------------------------------------------

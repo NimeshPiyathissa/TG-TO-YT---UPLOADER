@@ -66,7 +66,10 @@ def build_authorization_url(client_id: str, redirect_uri: str, state: str, code_
         "response_type": "code",
         "scope": SCOPES,
         "access_type": "offline",
-        "prompt": "consent",
+        # select_account forces Google's account/channel chooser every time (consent alone lets it
+        # silently reuse the last identity, which links the wrong Brand channel); consent keeps the
+        # refresh token coming back.
+        "prompt": "select_account consent",
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",

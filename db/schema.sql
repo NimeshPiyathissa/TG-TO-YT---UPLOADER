@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS yt_channels (
     added_at            TEXT NOT NULL,
     added_by            TEXT,
     last_used_at        TEXT,
-    uploads_count       INTEGER NOT NULL DEFAULT 0
+    uploads_count       INTEGER NOT NULL DEFAULT 0,
+    display_label       TEXT                              -- operator-chosen name; NULL = use channel_title
 );
 
 CREATE TABLE IF NOT EXISTS oauth_states (

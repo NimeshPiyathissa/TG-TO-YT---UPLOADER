@@ -3,7 +3,7 @@
   Waiting for the Google redirect via your SSH tunnel…
 </div>
 {% elif status == "done" %}
-<div id="loopback-status" class="flash flash-success">Linked channel: {{ channel.channel_title }}. <a href="/channels">Go to Channels</a></div>
+<div id="loopback-status" class="flash flash-success">{% if channel.already_linked %}{{ channel.channel_title }} was already linked, so its connection was refreshed (no duplicate).{% else %}Linked new channel: {{ channel.channel_title }}.{% endif %} <a href="/channels">Go to Channels</a></div>
 {% elif status == "error" %}
 <div id="loopback-status" class="flash flash-error">Linking failed: {{ error }}</div>
 {% else %}

@@ -486,3 +486,10 @@ input.w-short{width:12ch;max-width:100%}
 }
 .sheet .theme-seg button span,.login-theme .theme-seg button span{display:inline}
 .login-theme .theme-seg{margin:0;background:var(--card)}
+
+.label-form{display:flex;gap:8px;align-items:center;margin-top:12px}
+.label-form input[type=text]{flex:1 1 auto;min-width:0}
+.quota-note{margin:0;color:var(--ink-2);line-height:1.55}
+.prose{max-width:720px;line-height:1.65}
+.prose h2{margin:28px 0 8px}
+.prose li{margin:6px 0}

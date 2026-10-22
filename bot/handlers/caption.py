@@ -64,11 +64,11 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         if job is None:
             await cq.answer("Job not found.", show_alert=True)
             return
-        channels = await store.list_yt_channels()
-        active = [c for c in channels if c["status"] == "active"]
+        active, needs_reauth = flow.split_channels(await store.list_yt_channels())
         await store.save_flow_session(cq.from_user.id, job_id, "awaiting_channel", {})
         text = flow.channel_picker_text(job.file_name or "video", job.size_bytes or 0,
-                                         job.duration_s, job.width, job.height)
+                                         job.duration_s, job.width, job.height,
+                                         note=flow.reauth_note(needs_reauth))
         await cq.message.edit_text(text, parse_mode=ParseMode.HTML,
                                     reply_markup=flow.channel_picker_keyboard(active, job_id))
         await cq.answer()

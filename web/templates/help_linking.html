@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Linking more channels — TG→YT Uploader{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1>Linking more channels</h1><div class="sub">Several YouTube channels, one Google account, one OAuth client</div></div></div>
+<div class="prose">
+
+<h2>One client JSON covers every channel</h2>
+<p>You upload the <code>client_secret.json</code> once. Every channel you link afterwards is a separate Google consent
+that produces its own refresh token, stored encrypted against that channel. You never need a second client JSON.</p>
+<p><b>Do not create extra Google Cloud projects or OAuth clients to get more quota.</b> That goes against YouTube's API
+terms. The quota belongs to the one project behind your client JSON and is shared by all channels.</p>
+
+<h2>Link each channel</h2>
+<ol>
+  <li>Make sure each channel is a Brand Account channel and that the Google account you sign in with is an Owner or
+      Manager of it (YouTube Studio → Settings → Permissions).</li>
+  <li>Open <a href="/channels">Channels</a> → <b>Link a channel</b> and follow Google's consent screens.</li>
+  <li>The panel asks Google to show its <b>account chooser</b> first. Choose your Google account.</li>
+  <li>If that account manages Brand Accounts, Google then asks <b>which channel</b> to grant access to. Pick the one you
+      want to add now.</li>
+  <li>Approve the consent screen. The panel answers either <i>Linked new channel: …</i> or
+      <i>… was already linked</i>.</li>
+  <li>Repeat from step 2 for every other channel, choosing a different one each time.</li>
+</ol>
+<p>New channels appear in the Telegram bot immediately; nothing needs a restart. The first channel you link becomes
+the default. You can change the default, and give each channel a <b>display label</b> (shown in the bot and panel),
+on the <a href="/channels">Channels</a> page.</p>
+<p>When more than one channel is active the bot asks where each video should go, with the default listed first.
+Channels that need re-authorization are left out of that list, and the bot says which ones.</p>
+
+<h2>If Google skips the chooser</h2>
+<p>The panel asks Google to show the chooser every time, but Google decides what to display. If you land back in the panel
+with <i>was already linked</i>, or the wrong channel got linked:</p>
+<ul>
+  <li>Start the link again in a private/incognito window and sign in with only the Google account that manages the channels.</li>
+  <li>Remove this app's access at <code>myaccount.google.com/permissions</code>, then link again so Google asks afresh.</li>
+  <li>Check you are an Owner or Manager of the channel you want and that it is a Brand Account channel.</li>
+  <li>To fix a channel that shows <i>needs re-auth</i>, use its <b>Re-authorize</b> button and pick that same channel
+      in the chooser. Picking a different one links that one instead, and the original stays broken.</li>
+</ul>
+
+<h2>Uploads longer than 15 minutes</h2>
+<p>YouTube only accepts videos over 15 minutes from a channel whose phone number is verified. Verify
+<b>each channel</b> separately at <code>youtube.com/verify</code>. Until then a long upload to that channel fails even
+though the others work.</p>
+
+<h2>Quota is one shared pool</h2>
+<p>Quota is counted per Google Cloud project, not per channel. Every upload to any channel draws from the same daily pool,
+and the daily upload allowance is shared too (see the Dashboard). The per-channel upload counts on the Channels page are
+statistics only; they do not give each channel its own quota. Quota resets at midnight Pacific time.</p>
+
+<p><a href="/channels/add" class="btn btn-primary">Link a channel</a></p>
+</div>
+{% endblock %}

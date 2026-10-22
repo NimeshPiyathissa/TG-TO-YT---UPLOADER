@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 
 from bot import crypto, security
@@ -19,6 +19,7 @@ from yt.credentials import (InvalidCredentialFile, OfflineToken, ServiceAccountR
                              parse_client_secret, parse_token_json)
 from yt.oauth import (LoopbackCallbackServer, OAuthError, build_authorization_url,
                        exchange_code, generate_pkce_pair, refresh_access_token, revoke_token)
+from yt.quota import BUCKET_LIMITS, remaining
 from yt.videos import list_my_channels
 
 log = structlog.get_logger(__name__)
@@ -52,13 +53,22 @@ async def finalize_channel_from_code(store, code: str, state_row, redirect_uri: 
     if not channels:
         raise RuntimeError("That Google account has no YouTube channel to link.")
     ch = channels[0]
+    existed = await store.get_yt_channel_by_channel_id(ch["channel_id"]) is not None
     expires_at = (datetime.now(timezone.utc) + timedelta(seconds=tok.expires_in)).isoformat()
     channel_pk = await store.upsert_yt_channel(
         ch["channel_id"], ch["title"], ch["handle"], ch["thumbnail_url"],
         crypto.encrypt(tok.refresh_token), crypto.encrypt(tok.access_token), expires_at,
         tok.scope, state_row["created_by"],
     )
-    return {"channel_pk": channel_pk, "channel_title": ch["title"]}
+    return {"channel_pk": channel_pk, "channel_title": ch["title"], "already_linked": existed}
+
+
+def link_result_message(channel: dict) -> str:
+    """One wording for every linking path: say whether this created a channel or refreshed one."""
+    if channel.get("already_linked"):
+        return (f"{channel['channel_title']} was already linked, so its connection was refreshed instead of "
+                "adding a duplicate. To add a different channel, pick it in Google's chooser.")
+    return f"Linked new channel: {channel['channel_title']}"
 
 
 async def _run_loopback_link(store, state: str) -> None:
@@ -94,8 +104,18 @@ async def channels_list(request: Request):
     templates = request.app.state.templates
     store = request.app.state.store
     channels = await store.list_yt_channels()
+    quota = await store.quota_summary()
     return templates.TemplateResponse(request, "channels.html", {
         "channels": channels, "status_label": STATUS_LABEL, "flashes": pop_flashes(request),
+        "general_used": quota.get("general", 0), "general_limit": BUCKET_LIMITS["general"],
+        "uploads_remaining": await remaining(store, "uploads"), "uploads_limit": BUCKET_LIMITS["uploads"],
+    })
+
+
+@router.get("/help/linking-channels")
+async def linking_help(request: Request):
+    return request.app.state.templates.TemplateResponse(request, "help_linking.html", {
+        "redirect_uri": settings.redirect_uri, "flashes": pop_flashes(request),
     })
 
 
@@ -231,6 +251,7 @@ async def upload_token(request: Request, file: UploadFile = File(...), csrf_ok: 
         return RedirectResponse("/channels/add", status_code=303)
 
     ch = channels[0]
+    existed = await store.get_yt_channel_by_channel_id(ch["channel_id"]) is not None
     expires_at = (datetime.now(timezone.utc) + timedelta(seconds=tok.expires_in)).isoformat()
     user = auth.current_user(request)
     scopes = " ".join(offline.scopes) if offline.scopes else "https://www.googleapis.com/auth/youtube.upload"
@@ -240,15 +261,32 @@ async def upload_token(request: Request, file: UploadFile = File(...), csrf_ok: 
         scopes, user["username"] if user else None,
     )
     await store.write_audit("app_user", user["username"] if user else None, "channel_linked", target=ch["title"])
-    flash(request, f"Linked channel: {ch['title']}", "success")
+    flash(request, link_result_message({"channel_title": ch["title"], "already_linked": existed}),
+          "info" if existed else "success")
     return RedirectResponse("/channels", status_code=303)
 
 
 @router.post("/channels/{channel_pk}/set-default")
 async def set_default(channel_pk: int, request: Request, csrf_ok: None = Depends(require_csrf)):
     store = request.app.state.store
-    await store.set_default_channel(channel_pk)
-    flash(request, "Default channel updated.", "success")
+    if await store.set_default_channel(channel_pk):
+        channel = await store.get_yt_channel(channel_pk)
+        flash(request, f"{channel['channel_title']} is now the default channel.", "success")
+    else:
+        flash(request, "Only an active channel can be the default. Re-authorize it first.", "error")
+    return RedirectResponse("/channels", status_code=303)
+
+
+@router.post("/channels/{channel_pk}/label")
+async def set_label(channel_pk: int, request: Request, label: str = Form(""), csrf_ok: None = Depends(require_csrf)):
+    store = request.app.state.store
+    if not await store.set_channel_label(channel_pk, label):
+        flash(request, "That channel no longer exists.", "error")
+        return RedirectResponse("/channels", status_code=303)
+    user = auth.current_user(request)
+    await store.write_audit("app_user", user["username"] if user else None, "channel_label_changed",
+                             target=str(channel_pk), detail={"label": label.strip()[:60]})
+    flash(request, "Label saved." if label.strip() else "Label cleared; showing the YouTube name.", "success")
     return RedirectResponse("/channels", status_code=303)
 
 
