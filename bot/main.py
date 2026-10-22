@@ -142,6 +142,7 @@ async def run() -> None:
     await queue.start()
 
     web_app = create_app(store)
+    web_app.state.bot = bot_client  # lets the Admin Panel DM users (bot/notify.py)
     uvicorn_config = _build_uvicorn_config(web_app)
     uvicorn_server = uvicorn.Server(uvicorn_config)
     web_task = asyncio.create_task(uvicorn_server.serve())
