@@ -27,6 +27,8 @@ from pathlib import Path
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
 ]
 
 

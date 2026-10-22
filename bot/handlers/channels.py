@@ -9,7 +9,7 @@ from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot import access, crypto
+from bot import access, crypto, flow
 from bot.fmt import (
     EMOJI_ADD, EMOJI_CHANNEL_OK, EMOJI_LINKED, EMOJI_POINT, EMOJI_SEP, EMOJI_STAR, b, emoji, esc,
 )
@@ -117,9 +117,15 @@ async def _render_channel_list(store: Store) -> str:
     if not channels:
         return "No channels linked yet. Ask an admin to run /addyt."
     lines = [f"{emoji(EMOJI_LINKED)} <b>Linked channels</b>"]
-    for n, c in enumerate(channels, start=1):
-        star = f"{emoji(EMOJI_STAR)} " if c["is_default"] else ""
-        icon = STATUS_ICON.get(c["status"], "")
-        row = f"{n}. {star}{b(c['channel_title'])} {emoji(EMOJI_SEP)} {b(c['uploads_count'])} uploads"
-        lines.append(f"{row} {icon}" if icon else row)
+    groups = flow.group_by_account(channels)
+    n = 0
+    for email, members in groups:
+        if len(groups) > 1:  # account headers only matter once there is more than one account
+            lines.append(f"\n👤 {b(email or flow.UNRECORDED_ACCOUNT)}")
+        for c in members:
+            n += 1  # numbering runs on across accounts
+            star = f"{emoji(EMOJI_STAR)} " if c["is_default"] else ""
+            icon = STATUS_ICON.get(c["status"], "")
+            row = f"{n}. {star}{b(c['channel_title'])} {emoji(EMOJI_SEP)} {b(c['uploads_count'])} uploads"
+            lines.append(f"{row} {icon}" if icon else row)
     return "\n".join(lines)

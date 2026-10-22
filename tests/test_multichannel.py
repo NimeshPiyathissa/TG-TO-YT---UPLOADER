@@ -42,6 +42,10 @@ def fake_google(monkeypatch, store):
         cid, title = chosen["channel"]
         return [{"channel_id": cid, "title": title, "handle": f"@{title}", "thumbnail_url": None}]
 
+    async def fake_email(access_token):
+        return None
+
+    monkeypatch.setattr(channels_routes, "fetch_account_email", fake_email)  # no network in tests
     monkeypatch.setattr(channels_routes, "exchange_code", fake_exchange)
     monkeypatch.setattr(channels_routes, "list_my_channels", fake_list)
     return chosen

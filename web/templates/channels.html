@@ -10,8 +10,15 @@
   <a href="/channels/add" class="btn btn-primary">{{ icon("plus") }}Link a channel</a>
 </div>
 {% if channels %}
+{% for email, members in groups %}
+<section class="account-group">
+  <h2 class="account-head">
+    <span class="account-email{{ '' if email else ' account-unrecorded' }}">{{ email or unrecorded_label }}</span>
+    <span class="account-count">{{ members|length }} channel{{ "" if members|length == 1 else "s" }}</span>
+  </h2>
+  {% if not email %}<p class="sub">Re-authorize each of these channels (leave the email permission ticked) and they move under their Google account.</p>{% endif %}
 <div class="channel-grid">
-  {% for c in channels %}
+  {% for c in members %}
   <div class="card channel-card">
     <div class="channel-top">
       {% if c.thumbnail_url %}<img src="{{ c.thumbnail_url }}" class="channel-thumb" alt="">
@@ -24,6 +31,7 @@
     </div>
     <div class="channel-stats">
       <div><b>{{ c.uploads_count }}</b><span>Uploads</span></div>
+      <div><b>{{ (c.subscriber_count|thousands) if c.subscriber_count is not none else "—" }}</b><span title="Snapshot from the last time this channel was linked">Subscribers</span></div>
       <div><b>{{ c.last_used_at[:10] if c.last_used_at else "never" }}</b><span>Last used</span></div>
     </div>
     <div class="card-actions">
@@ -51,8 +59,17 @@
     <div id="confirm-{{ c.id }}"></div>
   </div>
   {% endfor %}
-  <a href="/channels/add" class="channel-add">{{ icon("plus") }}<span>Link another channel</span></a>
+  {% if email %}
+  <form method="post" action="{{ '/channels/link/start' if oauth_mode == 'hostname' else '/channels/link/loopback/start' }}" class="channel-add channel-add-account">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="login_hint" value="{{ email }}">
+    <button type="submit" class="tile-btn">{{ icon("plus") }}<span>Add another channel from this account</span></button>
+  </form>
+  {% endif %}
 </div>
+</section>
+{% endfor %}
+<p><a href="/channels/add" class="btn">{{ icon("plus") }}Link a channel from another Google account</a></p>
 <section class="panel">
   <h2>Shared quota</h2>
   <p class="quota-note"><b>{{ general_used|thousands }}</b> of {{ general_limit|thousands }} units used today ·

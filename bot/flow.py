@@ -34,6 +34,35 @@ def validate_caption(raw_text: str) -> tuple[str, str]:
     return title, description
 
 
+UNRECORDED_ACCOUNT = "Account not recorded — re-authorize to update"
+
+
+def _email_of(channel) -> str | None:
+    try:
+        return channel["google_email"] or None
+    except (KeyError, IndexError):
+        return None
+
+
+def group_by_account(channels: list, default_group_first: bool = True) -> list[tuple[str | None, list]]:
+    """Group channels under the Google account that owns them, like an account switcher.
+
+    Returns ``[(email_or_None, [channels])]``. Channels linked before emails were recorded
+    land in the ``None`` group, listed last. The default channel leads its group and, when
+    ``default_group_first`` is set, that group leads the list. Original (id) order is kept
+    otherwise.
+    """
+    groups: dict[str | None, list] = {}
+    for c in channels:
+        groups.setdefault(_email_of(c), []).append(c)
+    for members in groups.values():
+        members.sort(key=lambda c: not c["is_default"])  # stable: default first, rest keep order
+    def rank(item):
+        email, members = item
+        return (not (default_group_first and members[0]["is_default"]), email is None, members[0]["id"])
+    return sorted(groups.items(), key=rank)
+
+
 def split_channels(channels: list) -> tuple[list, list]:
     """(usable, needs_reauth): only active channels can receive an upload."""
     return ([c for c in channels if c["status"] == "active"],
@@ -65,9 +94,13 @@ def channel_picker_text(file_name: str, size_bytes: int, duration_s: float | Non
 
 def channel_picker_keyboard(channels: list, job_id: int) -> InlineKeyboardMarkup:
     rows = []
-    for ch in sorted(channels, key=lambda c: not c["is_default"]):  # default channel first, rest keep order
-        star = "⭐ " if ch["is_default"] else ""
-        rows.append([InlineKeyboardButton(f"📺 {star}{ch['channel_title']}", callback_data=f"pickch:{job_id}:{ch['id']}")])
+    groups = group_by_account(channels)
+    for email, members in groups:
+        if len(groups) > 1:  # account headers only matter once there is more than one account
+            rows.append([InlineKeyboardButton(f"👤 {email or UNRECORDED_ACCOUNT}", callback_data="acct")])
+        for ch in members:  # default channel first within its account
+            star = "⭐ " if ch["is_default"] else ""
+            rows.append([InlineKeyboardButton(f"📺 {star}{ch['channel_title']}", callback_data=f"pickch:{job_id}:{ch['id']}")])
     rows.append([InlineKeyboardButton("❌ Cancel", callback_data=f"canceljob:{job_id}")])
     return InlineKeyboardMarkup(rows)
 

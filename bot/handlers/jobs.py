@@ -114,6 +114,10 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         await cq.message.edit_text(f"🗑 Deleted from YouTube: {esc(row['title'])}")
         await cq.answer("Deleted.")
 
+    @app.on_callback_query(filters.regex(r"^acct$"))
+    async def account_header_cb(client: pyrogram.Client, cq: CallbackQuery) -> None:
+        await cq.answer()  # the Google-account label rows in the channel picker aren't actions
+
     @app.on_callback_query(filters.regex(r"^noop"))
     async def noop_cb(client: pyrogram.Client, cq: CallbackQuery) -> None:
         await cq.answer("Send another video whenever you're ready!")

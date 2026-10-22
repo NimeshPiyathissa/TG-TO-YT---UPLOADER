@@ -126,8 +126,9 @@ class Store:
         (schema.sql only has CREATE TABLE IF NOT EXISTS, which never alters a table)."""
         cur = await self._conn.execute("PRAGMA table_info(yt_channels)")
         columns = {row["name"] for row in await cur.fetchall()}
-        if "display_label" not in columns:
-            await self._conn.execute("ALTER TABLE yt_channels ADD COLUMN display_label TEXT")
+        for column, ddl in (("display_label", "TEXT"), ("google_email", "TEXT"), ("subscriber_count", "INTEGER")):
+            if column not in columns:
+                await self._conn.execute(f"ALTER TABLE yt_channels ADD COLUMN {column} {ddl}")
 
     async def close(self) -> None:
         if self._conn:
@@ -321,7 +322,8 @@ class Store:
     async def upsert_yt_channel(
         self, channel_id: str, channel_title: str, handle: Optional[str], thumbnail_url: Optional[str],
         refresh_token_enc: bytes, access_token_enc: Optional[bytes], access_expires_at: Optional[str],
-        scopes: str, added_by: Optional[str],
+        scopes: str, added_by: Optional[str], google_email: Optional[str] = None,
+        subscriber_count: Optional[int] = None,
     ) -> int:
         cur = await self.conn.execute("SELECT id FROM yt_channels WHERE channel_id = ?", (channel_id,))
         existing = await cur.fetchone()
@@ -329,10 +331,11 @@ class Store:
             await self.conn.execute(
                 """UPDATE yt_channels SET channel_title = ?, handle = ?, thumbnail_url = ?,
                        refresh_token_enc = ?, access_token_enc = ?, access_expires_at = ?,
-                       scopes = ?, status = 'active', last_used_at = ?
+                       scopes = ?, status = 'active', last_used_at = ?,
+                       google_email = COALESCE(?, google_email), subscriber_count = COALESCE(?, subscriber_count)
                    WHERE id = ?""",
                 (channel_title, handle, thumbnail_url, refresh_token_enc, access_token_enc,
-                 access_expires_at, scopes, now(), existing["id"]),
+                 access_expires_at, scopes, now(), google_email, subscriber_count, existing["id"]),
             )
             await self.conn.commit()
             return existing["id"]
@@ -341,10 +344,10 @@ class Store:
         cur = await self.conn.execute(
             """INSERT INTO yt_channels
                (channel_id, channel_title, handle, thumbnail_url, refresh_token_enc, access_token_enc,
-                access_expires_at, scopes, status, is_default, added_at, added_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+                access_expires_at, scopes, status, is_default, added_at, added_by, google_email, subscriber_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)""",
             (channel_id, channel_title, handle, thumbnail_url, refresh_token_enc, access_token_enc,
-             access_expires_at, scopes, int(is_first), now(), added_by),
+             access_expires_at, scopes, int(is_first), now(), added_by, google_email, subscriber_count),
         )
         await self.conn.commit()
         return cur.lastrowid
@@ -354,7 +357,7 @@ class Store:
         "SELECT id, channel_id, COALESCE(NULLIF(display_label, ''), channel_title) AS channel_title, "
         "channel_title AS youtube_title, display_label, handle, thumbnail_url, refresh_token_enc, "
         "access_token_enc, access_expires_at, scopes, status, is_default, added_at, added_by, "
-        "last_used_at, uploads_count FROM yt_channels"
+        "last_used_at, uploads_count, google_email, subscriber_count FROM yt_channels"
     )
 
     async def list_yt_channels(self, include_revoked: bool = False) -> list[aiosqlite.Row]:

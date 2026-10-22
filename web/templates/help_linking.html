@@ -1,32 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Linking more channels — TG→YT Uploader{% endblock %}
 {% block content %}
-<div class="page-header"><div><h1>Linking more channels</h1><div class="sub">Several YouTube channels, one Google account, one OAuth client</div></div></div>
+<div class="page-header"><div><h1>Linking more channels</h1><div class="sub">Several Google accounts, several channels each, one OAuth client</div></div></div>
 <div class="prose">
 
-<h2>One client JSON covers every channel</h2>
+<h2>One client JSON covers every account and channel</h2>
 <p>You upload the <code>client_secret.json</code> once. Every channel you link afterwards is a separate Google consent
 that produces its own refresh token, stored encrypted against that channel. You never need a second client JSON.</p>
 <p><b>Do not create extra Google Cloud projects or OAuth clients to get more quota.</b> That goes against YouTube's API
 terms. The quota belongs to the one project behind your client JSON and is shared by all channels.</p>
 
+<h2>Each channel is linked separately</h2>
+<p>Google gives this app no way to list or add all of an account's Brand channels in one go. Each authorization is tied to
+the single channel you pick in Google's chooser, and the YouTube API has no call that lists the others for a normal account.
+So a Google account with three channels needs three links, one per channel. The Channels page groups the results under the
+Google account they belong to, like YouTube's account switcher.</p>
+
+<h2>Before you add a Google account: add it as a test user</h2>
+<p>While your OAuth consent screen is in <b>Testing</b>, only listed test users can sign in. For <b>every</b> Google account
+you want to link, including accounts that only manage Brand channels:</p>
+<ol>
+  <li>Open Google Cloud Console → <b>APIs &amp; Services</b> → <b>OAuth consent screen</b> (shown as <i>Audience</i> in the newer
+      console) for the project that owns your client JSON.</li>
+  <li>Under <b>Test users</b>, choose <b>Add users</b> and enter that account's Gmail address.</li>
+  <li>Save. Google allows up to 100 test users.</li>
+</ol>
+<p>If you skip this, Google shows <i>Access blocked: … has not completed the Google verification process</i> and the link
+fails. Also note that Google expires refresh tokens after 7 days for projects left in Testing status; channels then show
+<i>needs re-auth</i> until you re-authorize them. Check your consent screen's publishing status in the Cloud Console if
+channels keep dropping.</p>
+
 <h2>Link each channel</h2>
 <ol>
   <li>Make sure each channel is a Brand Account channel and that the Google account you sign in with is an Owner or
       Manager of it (YouTube Studio → Settings → Permissions).</li>
-  <li>Open <a href="/channels">Channels</a> → <b>Link a channel</b> and follow Google's consent screens.</li>
-  <li>The panel asks Google to show its <b>account chooser</b> first. Choose your Google account.</li>
+  <li><b>First channel of a new Google account:</b> open <a href="/channels">Channels</a> → <b>Link a channel from another
+      Google account</b>. <b>Another channel of an account you already linked:</b> use that account's
+      <b>Add another channel from this account</b> button. It pre-selects the account so Google jumps straight to that
+      account's channel chooser.</li>
+  <li>The panel asks Google to show its <b>account chooser</b>. Choose the Google account.</li>
   <li>If that account manages Brand Accounts, Google then asks <b>which channel</b> to grant access to. Pick the one you
       want to add now.</li>
-  <li>Approve the consent screen. The panel answers either <i>Linked new channel: …</i> or
-      <i>… was already linked</i>.</li>
-  <li>Repeat from step 2 for every other channel, choosing a different one each time.</li>
+  <li><b>Google hasn't verified this app:</b> because this is your own private app you will see this warning. Choose
+      <b>Advanced</b>, then <b>Go to … (unsafe)</b>. On the permissions screen leave <b>every box ticked</b>
+      (including the email one, which is how the channel is filed under its account) and press <b>Continue</b>.</li>
+  <li>The panel answers either <i>Linked new channel: …</i> or <i>… was already linked</i>, and names the Google account.</li>
+  <li>Repeat for every other channel, choosing a different one in the chooser each time.</li>
 </ol>
 <p>New channels appear in the Telegram bot immediately; nothing needs a restart. The first channel you link becomes
 the default. You can change the default, and give each channel a <b>display label</b> (shown in the bot and panel),
 on the <a href="/channels">Channels</a> page.</p>
-<p>When more than one channel is active the bot asks where each video should go, with the default listed first.
-Channels that need re-authorization are left out of that list, and the bot says which ones.</p>
+<p>When more than one channel is active the bot asks where each video should go, with the channels grouped under their
+Google account and the default listed first. Channels that need re-authorization are left out of that list, and the bot
+says which ones.</p>
+
+<h2>Channels listed under "Account not recorded"</h2>
+<p>Channels linked before the account email was recorded, and any link where the email permission was unticked, are listed
+under <i>Account not recorded — re-authorize to update</i>. They keep working. Use <b>Re-authorize</b> on each one, pick that
+same channel in Google's chooser, and leave all permissions ticked; it then moves under its Google account.</p>
 
 <h2>If Google skips the chooser</h2>
 <p>The panel asks Google to show the chooser every time, but Google decides what to display. If you land back in the panel
@@ -45,9 +76,9 @@ with <i>was already linked</i>, or the wrong channel got linked:</p>
 though the others work.</p>
 
 <h2>Quota is one shared pool</h2>
-<p>Quota is counted per Google Cloud project, not per channel. Every upload to any channel draws from the same daily pool,
-and the daily upload allowance is shared too (see the Dashboard). The per-channel upload counts on the Channels page are
-statistics only; they do not give each channel its own quota. Quota resets at midnight Pacific time.</p>
+<p>Quota is counted per Google Cloud project, not per channel or per Google account. Every upload to any channel draws from
+the same daily pool, and the daily upload allowance is shared too (see the Dashboard). The per-channel upload counts on the
+Channels page are statistics only; they do not give each channel its own quota. Quota resets at midnight Pacific time.</p>
 
 <p><a href="/channels/add" class="btn btn-primary">Link a channel</a></p>
 </div>

@@ -27,7 +27,11 @@ log = structlog.get_logger(__name__)
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
-SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
+USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+# openid + email are only used to record which Google account owns a channel (for grouping); they are
+# non-sensitive scopes and grant no extra YouTube access.
+SCOPES = ("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly "
+          "openid email")
 
 _HUMAN_ERRORS = {
     "redirect_uri_mismatch": "The redirect URI Google received doesn't match what's registered for this OAuth client.",
@@ -59,7 +63,8 @@ def generate_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def build_authorization_url(client_id: str, redirect_uri: str, state: str, code_challenge: str) -> str:
+def build_authorization_url(client_id: str, redirect_uri: str, state: str, code_challenge: str,
+                            login_hint: Optional[str] = None) -> str:
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -74,6 +79,9 @@ def build_authorization_url(client_id: str, redirect_uri: str, state: str, code_
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
+    if login_hint:
+        # Pre-selects that Google account so Google jumps straight to its channel chooser.
+        params["login_hint"] = login_hint
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
@@ -122,6 +130,21 @@ async def refresh_access_token(client_id: str, client_secret: str, refresh_token
                 scope=body.get("scope", SCOPES),
                 token_type=body.get("token_type", "Bearer"),
             )
+
+
+async def fetch_account_email(access_token: str) -> Optional[str]:
+    """Google account email for this authorization, or None if the email scope wasn't granted
+    (or the call fails). Never raises: a missing email must not block linking a channel."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}) as resp:
+                if resp.status != 200:
+                    return None
+                email = (await resp.json()).get("email")
+    except Exception as exc:
+        log.warning("oauth.userinfo_failed", error=str(exc))
+        return None
+    return email.strip().lower() if isinstance(email, str) and email.strip() else None
 
 
 async def revoke_token(token: str) -> None:

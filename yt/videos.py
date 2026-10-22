@@ -58,13 +58,16 @@ async def delete_video(access_token: str, video_id: str) -> None:
 async def list_my_channels(access_token: str) -> list[dict]:
     def _call():
         yt = _client(access_token)
-        resp = yt.channels().list(part="snippet", mine=True).execute()
+        resp = yt.channels().list(part="snippet,statistics", mine=True).execute()
         out = []
         for item in resp.get("items", []):
             snippet = item["snippet"]
             thumbs = snippet.get("thumbnails", {})
             thumb = thumbs.get("default", {}).get("url") or thumbs.get("medium", {}).get("url")
+            stats = item.get("statistics", {})
+            subs = None if stats.get("hiddenSubscriberCount") else stats.get("subscriberCount")
             out.append({
+                "subscriber_count": int(subs) if subs is not None else None,
                 "channel_id": item["id"],
                 "title": snippet.get("title", "Untitled channel"),
                 "handle": snippet.get("customUrl"),

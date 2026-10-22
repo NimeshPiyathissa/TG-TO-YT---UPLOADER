@@ -138,22 +138,31 @@ tries first.
    https://support.google.com/youtube/contact/yt_api_form. Until it passes,
    leave `PROJECT_AUDITED=false`.
 
-## Linking more channels (several channels, one Google account)
+## Linking more channels (several Google accounts, several channels each)
 
-One `client_secret.json` covers every channel. Each channel you link is its own Google consent and gets its own
+One `client_secret.json` covers every account and channel. Each channel you link is its own Google consent and gets its own
 encrypted refresh token, stored per YouTube channel ID, so linking a second Brand Account channel never overwrites the first.
+There is no YouTube API call that lists or adds all of an account's Brand channels from one login (`managedByMe` is for
+content partners only), so **every channel is linked separately**. The Channels page and the bot's picker group channels
+under the Google account (email) they belong to.
 
-1. Make sure each channel is a Brand Account channel and your Google login is an Owner/Manager of it.
-2. Panel → **Channels** → **Link a channel**. Google always shows its account chooser (`prompt=select_account consent`);
-   pick your account, then, if it manages Brand Accounts, pick the channel to grant. Repeat per channel.
-3. Linking a channel that is already linked refreshes it instead of adding a duplicate, and the panel says so.
-4. On the Channels page set the **default** channel (listed first in the bot's picker) and an optional **display label** per channel.
+1. Add every Google account you will link as a **test user** (Cloud Console -> OAuth consent screen -> Test users) while
+   the consent screen is in Testing status. Note Google expires refresh tokens after 7 days for Testing projects.
+2. Make sure each channel is a Brand Account channel and your Google login is an Owner/Manager of it.
+3. Panel -> **Channels** -> **Link a channel from another Google account**, or an account's **Add another channel from this
+   account** button (sends `login_hint` so Google opens on that account). Google shows its account chooser
+   (`prompt=select_account consent`); pick the account, then the channel.
+4. Click through "Google hasn't verified this app" (Advanced -> Go to ... (unsafe)) and leave every permission ticked,
+   including email, then press Continue.
+5. Linking a channel that is already linked refreshes it instead of adding a duplicate, and the panel says so. Channels
+   linked before emails were recorded sit under "Account not recorded -- re-authorize to update" until re-authorized.
+6. On the Channels page set the **default** channel (listed first in the bot's picker) and an optional **display label**.
 
 If Google skips the chooser, retry in a private window signed in as only that account, or remove the app at
 `myaccount.google.com/permissions` and link again. Uploads over 15 minutes need a phone-verified channel
-(`youtube.com/verify`, once per channel). **Quota is one shared pool across all channels** (it belongs to the Google Cloud
-project); do not create extra projects or OAuth clients to raise it, which YouTube's API terms forbid. The in-panel version
-of this guide is at `/help/linking-channels`.
+(`youtube.com/verify`, once per channel). **Quota is one shared pool across all channels and accounts** (it belongs to the
+Google Cloud project); do not create extra projects or OAuth clients to raise it, which YouTube's API terms forbid. The
+in-panel version of this guide is at `/help/linking-channels`.
 
 ## Generating the string session (MTProto relay)
 

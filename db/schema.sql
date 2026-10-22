@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS yt_channels (
     added_by            TEXT,
     last_used_at        TEXT,
     uploads_count       INTEGER NOT NULL DEFAULT 0,
-    display_label       TEXT                              -- operator-chosen name; NULL = use channel_title
+    display_label       TEXT,                             -- operator-chosen name; NULL = use channel_title
+    google_email        TEXT,                             -- owning Google account; NULL = linked before this was recorded
+    subscriber_count    INTEGER                           -- snapshot taken when the channel was linked; NULL = hidden/unknown
 );
 
 CREATE TABLE IF NOT EXISTS oauth_states (
