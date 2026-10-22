@@ -13,6 +13,7 @@ from bot.fmt import (
     BTN_HELP, BTN_MY_CHANNELS, BTN_STATUS, EMOJI_CHANNELS, EMOJI_LINKED, EMOJI_OK, EMOJI_OTHER,
     EMOJI_PLAY, EMOJI_QUOTA, EMOJI_STATUS, EMOJI_UPLOADS, EMOJI_WARN, b, emoji, esc, user_link,
 )
+from bot.handlers.channels import _render_channel_list
 from db.store import Store
 from yt.quota import BUCKET_LIMITS, remaining
 
@@ -111,10 +112,5 @@ def register(app: pyrogram.Client, store: Store) -> None:
             if not channels:
                 await cq.message.reply("No channels linked yet. Use /addyt to add one.")
             else:
-                lines = [f"{emoji(EMOJI_LINKED)} <b>Linked channels</b>"]
-                for c in channels:
-                    star = "⭐ " if c["is_default"] else ""
-                    status_icon = {"active": "✅", "needs_reauth": "⚠️", "revoked": "🚫"}.get(c["status"], "")
-                    lines.append(f"{star}{status_icon} {esc(c['channel_title'])}")
-                await cq.message.reply("\n".join(lines), parse_mode=ParseMode.HTML)
+                await cq.message.reply(await _render_channel_list(store), parse_mode=ParseMode.HTML)
         await cq.answer()
