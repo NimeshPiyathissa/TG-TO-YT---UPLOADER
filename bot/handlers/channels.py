@@ -113,7 +113,7 @@ async def _render_channel_list(store: Store) -> str:
     channels = await store.list_yt_channels()
     if not channels:
         return "No channels linked yet. Ask an admin to run /addyt."
-    lines = [f"{emoji(EMOJI_LINKED)}<b>Linked channels</b>"]
+    lines = [f"{emoji(EMOJI_LINKED)} <b>Linked channels</b>"]
     for c in channels:
         star = "⭐ " if c["is_default"] else ""
         icon = STATUS_ICON.get(c["status"], "")
