@@ -9,27 +9,31 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from bot import access
 from bot.config import settings
+from bot.fmt import (
+    BTN_HELP, BTN_MY_CHANNELS, BTN_STATUS, EMOJI_CHANNELS, EMOJI_LINKED, EMOJI_OK, EMOJI_OTHER,
+    EMOJI_PLAY, EMOJI_QUOTA, EMOJI_STATUS, EMOJI_UPLOADS, EMOJI_WARN, b, emoji, esc, user_link,
+)
 from db.store import Store
 from yt.quota import BUCKET_LIMITS, remaining
 
 log = structlog.get_logger(__name__)
 
 AUDIT_WARNING = (
-    "\n\n⚠️ *Heads up:* this API project hasn't passed Google's compliance audit "
-    "yet, so every upload lands as *Private* until it does."
+    f"\n\n{emoji(EMOJI_WARN)}<b>Heads up:</b> this API project hasn't passed Google's compliance audit "
+    f"yet, so every upload lands as <b>Private</b> until it does{emoji(EMOJI_OK)}."
 )
 
 HELP_TEXT = (
-    "📺 *Channels*\n"
+    f"{emoji(EMOJI_CHANNELS)}<b>Channels</b>\n"
     "/addyt — Add a YouTube channel\n"
     "/removeyt — Remove a channel\n"
     "/channels — List linked channels\n\n"
-    "⚡ *Uploads*\n"
+    f"{emoji(EMOJI_UPLOADS)}<b>Uploads</b>\n"
     "Just send a video to begin\n"
-    "/jobs — Active & recent uploads\n"
+    "/jobs — Active &amp; recent uploads\n"
     "/cancel — Cancel an upload\n\n"
-    "⚙️ *Other*\n"
-    "/status — Bot health & quota\n"
+    f"{emoji(EMOJI_OTHER)}<b>Other</b>\n"
+    "/status — Bot health &amp; quota\n"
     "/help — How it all works\n"
     "/id — Show your Telegram ID"
 )
@@ -42,30 +46,32 @@ def register(app: pyrogram.Client, store: Store) -> None:
         channels = await store.list_yt_channels()
         remaining_uploads = await remaining(store, "uploads")
         text = (
-            f"👋 Welcome, {message.from_user.first_name}!\n\n"
-            f"🎬 *TG → YouTube Uploader*\n"
+            f"👋 Welcome, {user_link(message.from_user.id, message.from_user.first_name)}!\n\n"
+            f"{emoji(EMOJI_PLAY)}<b>TG → YouTube Uploader</b>\n"
             f"Send me any video and I'll upload it straight to your YouTube channel.\n\n"
             f"{HELP_TEXT}\n\n"
-            f"🔗 Linked channels: *{len(channels)}*\n"
-            f"📊 Uploads left today: *{remaining_uploads}/{BUCKET_LIMITS['uploads']}*"
+            f"{emoji(EMOJI_LINKED)}Linked channels: {b(len(channels))}\n"
+            f"{emoji(EMOJI_QUOTA)}Uploads left today: {b(str(remaining_uploads) + '/' + str(BUCKET_LIMITS['uploads']))}"
         )
         if not settings.project_audited:
             text += AUDIT_WARNING
+        # Button labels are plain text (no bold/custom-emoji entities in kurigram 2.1.38 / layer 198),
+        # so the unicode fallback glyph is used and the caps carry the emphasis.
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("📺 My Channels", callback_data="menu:channels"),
-            InlineKeyboardButton("⚡ Status", callback_data="menu:status"),
-            InlineKeyboardButton("❓ Help", callback_data="menu:help"),
+            InlineKeyboardButton(f"{BTN_MY_CHANNELS[1]}MY CHANNELS", callback_data="menu:channels"),
+            InlineKeyboardButton(f"{BTN_STATUS[1]}STATUS", callback_data="menu:status"),
+            InlineKeyboardButton(f"{BTN_HELP[1]}HELP", callback_data="menu:help"),
         ]])
-        await message.reply(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb, disable_web_page_preview=True)
+        await message.reply(text, parse_mode=ParseMode.HTML, reply_markup=kb, disable_web_page_preview=True)
 
     @app.on_message(filters.command("help") & filters.private)
     @access.guard(store)
     async def help_handler(client: pyrogram.Client, message: Message) -> None:
-        await message.reply(HELP_TEXT, parse_mode=ParseMode.MARKDOWN)
+        await message.reply(HELP_TEXT, parse_mode=ParseMode.HTML)
 
     @app.on_message(filters.command("id") & filters.private)
     async def id_handler(client: pyrogram.Client, message: Message) -> None:
-        await message.reply(f"Your Telegram ID: `{message.from_user.id}`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply(f"Your Telegram ID: <code>{message.from_user.id}</code>", parse_mode=ParseMode.HTML)
 
     @app.on_message(filters.command("status") & filters.private)
     @access.guard(store)
@@ -77,17 +83,17 @@ def register(app: pyrogram.Client, store: Store) -> None:
         quota_summary = await store.quota_summary()
         remaining_uploads = await remaining(store, "uploads")
         lines = [
-            "⚡ *Bot status*",
+            f"{emoji(EMOJI_STATUS)}<b>Bot status</b>",
             f"Channels: {len(active)} active, {len(needs_reauth)} need re-link",
             f"Uploads left today: {remaining_uploads}/{BUCKET_LIMITS['uploads']}",
             f"Shared quota used: {quota_summary.get('general', 0)}/{BUCKET_LIMITS['general']}",
             f"Recent jobs: {len(jobs)}",
         ]
         for j in jobs:
-            lines.append(f"  #{j.id} {j.state}")
+            lines.append(f"  #{j.id} {esc(j.state)}")
         if not settings.project_audited:
             lines.append(AUDIT_WARNING.strip())
-        await message.reply("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await message.reply("\n".join(lines), parse_mode=ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^menu:"))
     async def menu_callback(client: pyrogram.Client, cq: CallbackQuery) -> None:
@@ -97,7 +103,7 @@ def register(app: pyrogram.Client, store: Store) -> None:
             return
         action = cq.data.split(":", 1)[1]
         if action == "help":
-            await cq.message.reply(HELP_TEXT, parse_mode=ParseMode.MARKDOWN)
+            await cq.message.reply(HELP_TEXT, parse_mode=ParseMode.HTML)
         elif action == "status":
             await cq.message.reply("Run /status for the full picture.")
         elif action == "channels":
@@ -105,10 +111,10 @@ def register(app: pyrogram.Client, store: Store) -> None:
             if not channels:
                 await cq.message.reply("No channels linked yet. Use /addyt to add one.")
             else:
-                lines = ["📺 *Linked channels*"]
+                lines = [f"{emoji(EMOJI_LINKED)}<b>Linked channels</b>"]
                 for c in channels:
                     star = "⭐ " if c["is_default"] else ""
                     status_icon = {"active": "✅", "needs_reauth": "⚠️", "revoked": "🚫"}.get(c["status"], "")
-                    lines.append(f"{star}{status_icon} {c['channel_title']}")
-                await cq.message.reply("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+                    lines.append(f"{star}{status_icon} {esc(c['channel_title'])}")
+                await cq.message.reply("\n".join(lines), parse_mode=ParseMode.HTML)
         await cq.answer()

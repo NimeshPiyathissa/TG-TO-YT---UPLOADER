@@ -80,8 +80,8 @@ class ProgressReporter:
     task decides when to actually hit the Telegram API."""
 
     PHASE_HEADER = {
-        "download": "📥 *Downloading from Telegram*",
-        "upload": "⬆️ *Uploading to YouTube*",
+        "download": "📥 <b>Downloading from Telegram</b>",
+        "upload": "⬆️ <b>Uploading to YouTube</b>",
     }
 
     def __init__(self, client: pyrogram.Client, chat_id: int, message_id: int):
@@ -122,7 +122,7 @@ class ProgressReporter:
         eta = human_eta((state.total - state.current) / state.rate_bps) if state.rate_bps > 0 else "?"
         header = self.PHASE_HEADER.get(state.phase, state.phase)
         lines = [header, *state.header_lines, "",
-                 f"[{bar}] {pct:.0f}%",
+                 f"<code>{bar}</code> {pct:.0f}%",
                  f"{human_bytes(state.current)} / {human_bytes(state.total)} · {human_rate(state.rate_bps)} · ~{eta} left"]
         lines.extend(state.footer_lines)
         return "\n".join(lines)
@@ -149,7 +149,7 @@ class ProgressReporter:
             return
         text = self._render(state)
         try:
-            await self.client.edit_message_text(self.chat_id, self.message_id, text, parse_mode=ParseMode.MARKDOWN)
+            await self.client.edit_message_text(self.chat_id, self.message_id, text, parse_mode=ParseMode.HTML)
             self._last_sent_pct = pct
             self._last_sent_at = now
             self._interval = MIN_EDIT_INTERVAL_S
@@ -165,7 +165,7 @@ class ProgressReporter:
     async def final_message(self, text: str, reply_markup=None) -> None:
         try:
             await self.client.edit_message_text(
-                self.chat_id, self.message_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
+                self.chat_id, self.message_id, text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
             )
         except MessageNotModified:
             pass
@@ -173,7 +173,7 @@ class ProgressReporter:
             await asyncio.sleep(e.value + 1)
             try:
                 await self.client.edit_message_text(
-                    self.chat_id, self.message_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
+                    self.chat_id, self.message_id, text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
                 )
             except Exception:
                 log.warning("ui.final_message_failed", exc_info=True)

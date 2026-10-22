@@ -27,6 +27,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import flow, progress_hub
 from bot.config import settings
 from bot.downloader import DownloadTooLarge, InsufficientDisk, cleanup_job_dir, download_job, retry_target
+from bot.fmt import b, esc
 from bot.ui import ProgressReporter, human_bytes, human_elapsed
 from db.store import Job, Store
 from yt.metadata import probe_video
@@ -259,7 +260,7 @@ class JobQueue:
             job = await self.store.transition_job(job.id, "AWAITING_CAPTION")
             await self.store.save_flow_session(job.tg_user_id, job.id, "awaiting_caption", {})
             text = (
-                f"✅ Auto-selected your only linked channel: *{channel['channel_title']}*\n\n"
+                f"✅ Auto-selected your only linked channel: {b(channel['channel_title'])}\n\n"
                 + flow.caption_prompt_text(channel["channel_title"])
             )
             kb = flow.caption_prompt_keyboard(job.id, single_channel=True)
@@ -270,7 +271,7 @@ class JobQueue:
             kb = flow.channel_picker_keyboard(channels, job.id)
         try:
             await self.bot.edit_message_text(job.chat_id, job.status_message_id, text,
-                                              parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+                                              parse_mode=ParseMode.HTML, reply_markup=kb)
         except Exception:
             log.warning("queue.prompt_send_failed", job_id=job.id, exc_info=True)
 
@@ -329,7 +330,7 @@ class JobQueue:
                 elapsed = human_elapsed(time.monotonic() - upload_started)
                 reporter.update(
                     "upload", current, total,
-                    header_lines=(f"📺 {channel_title}", f"🎬 {title}"),
+                    header_lines=(f"📺 {esc(channel_title)}", f"🎬 {esc(title)}"),
                     footer_lines=(f"⏱ Elapsed {elapsed}",),
                 )
 
@@ -407,8 +408,8 @@ class JobQueue:
             try:
                 await self.bot.send_message(
                     job.chat_id,
-                    f"❌ *Upload failed*\n🎬 {title}\n⚠️ {reason}\n🔁 Attempt {attempts}/{MAX_ATTEMPTS} — retrying in {delay}s",
-                    parse_mode=ParseMode.MARKDOWN,
+                    f"❌ <b>Upload failed</b>\n🎬 {esc(title)}\n⚠️ {esc(reason)}\n🔁 Attempt {attempts}/{MAX_ATTEMPTS} — retrying in {delay}s",
+                    parse_mode=ParseMode.HTML,
                 )
             except Exception:
                 pass
@@ -422,27 +423,27 @@ class JobQueue:
             try:
                 await self.bot.send_message(
                     job.chat_id,
-                    f"❌ *Upload failed*\n🎬 {title}\n⚠️ {reason}\n\nGave up after {MAX_ATTEMPTS} attempts.",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
+                    f"❌ <b>Upload failed</b>\n🎬 {esc(title)}\n⚠️ {esc(reason)}\n\nGave up after {MAX_ATTEMPTS} attempts.",
+                    parse_mode=ParseMode.HTML, reply_markup=kb,
                 )
             except Exception:
                 pass
 
     async def _send_success(self, job: Job, channel_title: str, title: str, actual_privacy: str, elapsed_s: float) -> None:
-        privacy_line = actual_privacy.capitalize()
+        privacy_line = esc(actual_privacy.capitalize())
         if not settings.project_audited and actual_privacy == "private" and job.privacy != "private":
-            privacy_line += " ⚠️ _(locked — project not audited)_"
+            privacy_line += " ⚠️ <i>(locked — project not audited)</i>"
         dur = job.duration_s or 0
         dur_str = f"{int(dur // 60)}:{int(dur % 60):02d}"
         avg = (job.size_bytes or 0) / elapsed_s / 1024 / 1024 if elapsed_s > 0 else 0
         text = (
-            f"✅ *Upload complete!*\n\n"
-            f"🎬 {title}\n"
-            f"📺 {channel_title}\n"
+            f"✅ <b>Upload complete!</b>\n\n"
+            f"🎬 {esc(title)}\n"
+            f"📺 {esc(channel_title)}\n"
             f"🔗 https://youtu.be/{job.video_id}\n\n"
             f"👁 Status: {privacy_line}\n"
             f"📦 {human_bytes(job.size_bytes or 0)} · ⏱ {dur_str}\n"
-            f"⌛ Took *{human_elapsed(elapsed_s)}* (avg {avg:.1f} MB/s)"
+            f"⌛ Took <b>{human_elapsed(elapsed_s)}</b> (avg {avg:.1f} MB/s)"
         )
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("▶️ Open on YouTube", url=f"https://youtu.be/{job.video_id}"),
@@ -450,10 +451,10 @@ class JobQueue:
         ], [InlineKeyboardButton("⬆️ Upload another", callback_data="noop")]])
         try:
             await self.bot.edit_message_text(job.chat_id, job.status_message_id, text,
-                                              parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+                                              parse_mode=ParseMode.HTML, reply_markup=kb)
         except Exception:
             try:
-                await self.bot.send_message(job.chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+                await self.bot.send_message(job.chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
             except Exception:
                 log.warning("queue.success_notify_failed", job_id=job.id, exc_info=True)
 
@@ -465,7 +466,7 @@ class JobQueue:
             return
         await self.store.fail_job(job_id, user_message)
         try:
-            await self.bot.send_message(job.chat_id, user_message)
+            await self.bot.send_message(job.chat_id, esc(user_message))
         except Exception:
             log.warning("queue.fail_notify_failed", job_id=job_id, exc_info=True)
         await self.store.clear_flow_session(job.tg_user_id)
@@ -481,8 +482,8 @@ class JobQueue:
         try:
             await self.bot.send_message(
                 job.chat_id,
-                f"🔑 *{channel_title}* needs to be re-authorised.\nOpen {web_url} to relink it, then tap Retry.",
-                parse_mode=ParseMode.MARKDOWN,
+                f"🔑 {b(channel_title)} needs to be re-authorised.\nOpen {web_url} to relink it, then tap Retry.",
+                parse_mode=ParseMode.HTML,
             )
         except Exception:
             log.warning("queue.reauth_notify_failed", job_id=job_id, exc_info=True)

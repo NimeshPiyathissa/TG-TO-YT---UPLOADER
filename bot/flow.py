@@ -11,6 +11,8 @@ from dataclasses import dataclass
 
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from bot.fmt import b, esc
+
 MAX_TITLE = 100
 MAX_DESC = 5000
 
@@ -39,9 +41,9 @@ def channel_picker_text(file_name: str, size_bytes: int, duration_s: float | Non
     dims = f"{width}×{height}" if width and height else "unknown"
     dur = _fmt_duration(duration_s) if duration_s else "?"
     return (
-        f"✅ *Video received* — `{file_name}`\n"
+        f"✅ <b>Video received</b> — <code>{esc(file_name)}</code>\n"
         f"📦 {human_bytes(size_bytes)} · ⏱ {dur} · {dims}\n\n"
-        f"📺 *Where should this go?*"
+        f"📺 <b>Where should this go?</b>"
     )
 
 
@@ -56,10 +58,10 @@ def channel_picker_keyboard(channels: list, job_id: int) -> InlineKeyboardMarkup
 
 def caption_prompt_text(channel_title: str) -> str:
     return (
-        f"📺 Channel: *{channel_title}*\n\n"
-        f"✍️ *Send me a caption for this video.*\n"
-        f"The first line becomes the *title* (max 100 chars), everything after it "
-        f"becomes the *description*.\n\n"
+        f"📺 Channel: {b(channel_title)}\n\n"
+        f"✍️ <b>Send me a caption for this video.</b>\n"
+        f"The first line becomes the <b>title</b> (max 100 chars), everything after it "
+        f"becomes the <b>description</b>.\n\n"
         f"Or tap below to use the filename as the title."
     )
 

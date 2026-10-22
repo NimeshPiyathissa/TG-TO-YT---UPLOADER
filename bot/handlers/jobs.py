@@ -9,6 +9,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import CallbackQuery, Message
 
 from bot import access
+from bot.fmt import esc
 from bot.downloader import cleanup_job_dir
 from bot.queue import JobQueue
 from db.store import Store
@@ -32,15 +33,15 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         lines = []
         for j in jobs:
             marker = "🟢" if j.state in ACTIVE_STATES else STATE_ICON.get(j.state, "⚫️")
-            lines.append(f"{marker} #{j.id} {j.state} {j.title or ''}".rstrip())
-        await message.reply("\n".join(lines) + "\n\nUse /cancel <id> to cancel an active job.")
+            lines.append(f"{marker} #{j.id} {esc(j.state)} {esc(j.title or '')}".rstrip())
+        await message.reply("\n".join(lines) + "\n\nUse /cancel &lt;id&gt; to cancel an active job.")
 
     @app.on_message(filters.command("cancel") & filters.private)
     @access.guard(store)
     async def cancel_handler(client: pyrogram.Client, message: Message) -> None:
         parts = message.text.split()
         if len(parts) != 2 or not parts[1].isdigit():
-            await message.reply("Usage: /cancel <job id> -- see /jobs for the list.")
+            await message.reply("Usage: /cancel &lt;job id&gt; -- see /jobs for the list.")
             return
         job_id = int(parts[1])
         job = await store.get_job(job_id)
@@ -110,7 +111,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
             return
         await store.soft_delete_video(video_id, deleted_by=f"tg:{cq.from_user.id}")
         await store.write_audit("tg_user", str(cq.from_user.id), "video_deleted", target=video_id)
-        await cq.message.edit_text(f"🗑 Deleted from YouTube: {row['title']}")
+        await cq.message.edit_text(f"🗑 Deleted from YouTube: {esc(row['title'])}")
         await cq.answer("Deleted.")
 
     @app.on_callback_query(filters.regex(r"^noop"))

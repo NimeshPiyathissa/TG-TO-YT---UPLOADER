@@ -10,6 +10,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot import access, crypto
+from bot.fmt import EMOJI_LINKED, b, emoji, esc
 from bot.config import settings
 from db.store import Store
 from yt.oauth import revoke_token
@@ -32,9 +33,9 @@ def register(app: pyrogram.Client, store: Store) -> None:
         if client_row is None:
             await message.reply(
                 "⚙️ No OAuth client is configured yet.\n\n"
-                f"Open {base}/settings, upload your `client_secret_*.json` from Google Cloud "
+                f"Open {base}/settings, upload your <code>client_secret_*.json</code> from Google Cloud "
                 "Console, then come back and run /addyt again.",
-                parse_mode=ParseMode.MARKDOWN,
+                parse_mode=ParseMode.HTML,
             )
             return
         await message.reply(
@@ -43,13 +44,13 @@ def register(app: pyrogram.Client, store: Store) -> None:
             f"🔗 {base}/channels/add\n\n"
             "You'll need the OAuth Client ID JSON from Google Cloud Console.\n"
             "Step-by-step guide: /help addyt",
-            parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True,
+            parse_mode=ParseMode.HTML, disable_web_page_preview=True,
         )
 
     @app.on_message(filters.command("channels") & filters.private)
     @access.guard(store)
     async def channels_handler(client: pyrogram.Client, message: Message) -> None:
-        await message.reply(await _render_channel_list(store), parse_mode=ParseMode.MARKDOWN)
+        await message.reply(await _render_channel_list(store), parse_mode=ParseMode.HTML)
 
     @app.on_message(filters.command("removeyt") & filters.private)
     @access.guard(store, admin_only=True)
@@ -77,8 +78,8 @@ def register(app: pyrogram.Client, store: Store) -> None:
             InlineKeyboardButton("❌ Cancel", callback_data="rmyt_cancel"),
         ]])
         await cq.message.edit_text(
-            f"⚠️ Remove *{channel['channel_title']}*? Videos already uploaded stay on YouTube.",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
+            f"⚠️ Remove {b(channel['channel_title'])}? Videos already uploaded stay on YouTube.",
+            parse_mode=ParseMode.HTML, reply_markup=kb,
         )
         await cq.answer()
 
@@ -99,7 +100,7 @@ def register(app: pyrogram.Client, store: Store) -> None:
             log.warning("channels.revoke_failed", channel_pk=channel_pk, exc_info=True)
         await store.delete_channel(channel_pk)
         await store.write_audit("tg_user", str(cq.from_user.id), "channel_removed", target=channel["channel_title"])
-        await cq.message.edit_text(f"🗑 Removed *{channel['channel_title']}*.", parse_mode=ParseMode.MARKDOWN)
+        await cq.message.edit_text(f"🗑 Removed {b(channel['channel_title'])}.", parse_mode=ParseMode.HTML)
         await cq.answer("Removed.")
 
     @app.on_callback_query(filters.regex(r"^rmyt_cancel$"))
@@ -112,9 +113,9 @@ async def _render_channel_list(store: Store) -> str:
     channels = await store.list_yt_channels()
     if not channels:
         return "No channels linked yet. Ask an admin to run /addyt."
-    lines = ["📺 *Linked channels*"]
+    lines = [f"{emoji(EMOJI_LINKED)}<b>Linked channels</b>"]
     for c in channels:
         star = "⭐ " if c["is_default"] else ""
         icon = STATUS_ICON.get(c["status"], "")
-        lines.append(f"{star}{icon} {c['channel_title']} — {c['uploads_count']} uploads")
+        lines.append(f"{star}{icon} {esc(c['channel_title'])} — {c['uploads_count']} uploads")
     return "\n".join(lines)

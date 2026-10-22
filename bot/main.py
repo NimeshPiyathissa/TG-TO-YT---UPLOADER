@@ -23,6 +23,7 @@ import signal
 from pathlib import Path
 
 import pyrogram
+from pyrogram.enums import ParseMode
 import structlog
 import uvicorn
 
@@ -108,6 +109,7 @@ async def run() -> None:
         api_id=settings.api_id,
         api_hash=settings.api_hash,
         bot_token=settings.bot_token,
+        parse_mode=ParseMode.HTML,
         workdir=SESSION_DIR,
     )
 

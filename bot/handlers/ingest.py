@@ -23,7 +23,7 @@ log = structlog.get_logger(__name__)
 VIDEO_MIME_PREFIX = "video/"
 OCTET_STREAM = "application/octet-stream"
 
-INITIAL_TEXT = "📥 *Downloading from Telegram*\n[░░░░░░░░░░░░░░░░] 0%\nStarting…"
+INITIAL_TEXT = "📥 <b>Downloading from Telegram</b>\n<code>░░░░░░░░░░░░░░░░</code> 0%\nStarting…"
 
 
 def _extract_media(message: Message):
@@ -103,6 +103,6 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
             size_bytes=size,
             mime=getattr(media, "mime_type", None) or "video/mp4",
         )
-        status_msg = await message.reply(INITIAL_TEXT, parse_mode=ParseMode.MARKDOWN)
+        status_msg = await message.reply(INITIAL_TEXT, parse_mode=ParseMode.HTML)
         await store.update_job_fields(job_id, status_message_id=status_msg.id)
         log.info("ingest.job_created", job_id=job_id, user_id=user_id, size=size)

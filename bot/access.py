@@ -21,7 +21,7 @@ ROLE_RANK = {"blocked": 0, "uploader": 1, "admin": 2, "owner": 3}
 
 
 def refusal_text(tg_user_id: int) -> str:
-    return f"🚫 You're not authorised to use this bot.\nYour ID: `{tg_user_id}`"
+    return f"🚫 You're not authorised to use this bot.\nYour ID: {tg_user_id}"
 
 
 async def check_access(store: Store, tg_user_id: int, username: str | None, first_name: str | None) -> str:

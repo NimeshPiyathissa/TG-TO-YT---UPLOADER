@@ -15,6 +15,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import CallbackQuery, Message
 
 from bot import access, flow
+from bot.fmt import b, esc
 from bot.downloader import cleanup_job_dir
 from bot.queue import JobQueue
 from db.store import Store
@@ -51,7 +52,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
 
         await cq.message.edit_text(
             flow.caption_prompt_text(channel["channel_title"]),
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             reply_markup=flow.caption_prompt_keyboard(job_id, single_channel=False),
         )
         await cq.answer()
@@ -68,7 +69,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         await store.save_flow_session(cq.from_user.id, job_id, "awaiting_channel", {})
         text = flow.channel_picker_text(job.file_name or "video", job.size_bytes or 0,
                                          job.duration_s, job.width, job.height)
-        await cq.message.edit_text(text, parse_mode=ParseMode.MARKDOWN,
+        await cq.message.edit_text(text, parse_mode=ParseMode.HTML,
                                     reply_markup=flow.channel_picker_keyboard(active, job_id))
         await cq.answer()
 
@@ -82,7 +83,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         title = Path(job.file_name or "video").stem[:100] or "Untitled"
         await store.transition_job(job_id, "READY", title=title, description="")
         await store.clear_flow_session(cq.from_user.id)
-        await cq.message.edit_text(f"🎬 Title set to *{title}*.\n\n⏳ Starting upload…", parse_mode=ParseMode.MARKDOWN)
+        await cq.message.edit_text(f"🎬 Title set to {b(title)}.\n\n⏳ Starting upload…", parse_mode=ParseMode.HTML)
         await cq.answer()
 
     @app.on_callback_query(filters.regex(r"^canceljob:(\d+)$"))
@@ -117,8 +118,8 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         except flow.ValidationError as exc:
             channel = await store.get_yt_channel(job.channel_pk)
             await message.reply(
-                f"⚠️ {exc}\n\n" + flow.caption_prompt_text(channel["channel_title"] if channel else ""),
-                parse_mode=ParseMode.MARKDOWN,
+                f"⚠️ {esc(exc)}\n\n" + flow.caption_prompt_text(channel["channel_title"] if channel else ""),
+                parse_mode=ParseMode.HTML,
                 reply_markup=flow.caption_prompt_keyboard(job_id, single_channel=False),
             )
             return
@@ -127,7 +128,7 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
         try:
             await client.edit_message_text(
                 job.chat_id, job.status_message_id,
-                f"🎬 Title set to *{title}*.\n\n⏳ Starting upload…", parse_mode=ParseMode.MARKDOWN,
+                f"🎬 Title set to {b(title)}.\n\n⏳ Starting upload…", parse_mode=ParseMode.HTML,
             )
         except Exception:
             log.warning("caption.status_edit_failed", job_id=job_id, exc_info=True)
