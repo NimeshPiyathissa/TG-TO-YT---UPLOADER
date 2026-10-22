@@ -43,3 +43,10 @@ def emoji(spec: tuple[int, str]) -> str:
 def user_link(user_id: int, first_name: str | None) -> str:
     """Bold + clickable name linking to the user's Telegram profile."""
     return f'<b><a href="tg://user?id={int(user_id)}">{esc(first_name or "there")}</a></b>'
+
+# /addyt and /channels
+EMOJI_ADD = (5397916757333654639, "➕")
+EMOJI_POINT = (6181244167067273165, "👉")
+EMOJI_STAR = (5418017294473251153, "⭐")
+EMOJI_CHANNEL_OK = (6156468734119642784, "✅")
+EMOJI_SEP = (5972223227055836399, "🔻")

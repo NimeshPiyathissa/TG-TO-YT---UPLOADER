@@ -10,14 +10,17 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot import access, crypto
-from bot.fmt import EMOJI_LINKED, b, emoji, esc
+from bot.fmt import (
+    EMOJI_ADD, EMOJI_CHANNEL_OK, EMOJI_LINKED, EMOJI_POINT, EMOJI_SEP, EMOJI_STAR, b, emoji, esc,
+)
 from bot.config import settings
 from db.store import Store
 from yt.oauth import revoke_token
 
 log = structlog.get_logger(__name__)
 
-STATUS_ICON = {"active": "✅", "needs_reauth": "⚠️", "revoked": "🚫"}
+# Active channels get the premium check at the end of the row; other states keep a plain icon.
+STATUS_ICON = {"active": emoji(EMOJI_CHANNEL_OK), "needs_reauth": "⚠️", "revoked": "🚫"}
 
 
 def web_base_url() -> str:
@@ -39,9 +42,9 @@ def register(app: pyrogram.Client, store: Store) -> None:
             )
             return
         await message.reply(
-            "➕ *Add a YouTube channel*\n\n"
+            f"{emoji(EMOJI_ADD)} <b>Add a YouTube Channel</b>\n\n"
             "Open the web panel to link a channel:\n"
-            f"🔗 {base}/channels/add\n\n"
+            f"{emoji(EMOJI_POINT)} {base}/channels/add\n\n"
             "You'll need the OAuth Client ID JSON from Google Cloud Console.\n"
             "Step-by-step guide: /help addyt",
             parse_mode=ParseMode.HTML, disable_web_page_preview=True,
@@ -114,8 +117,9 @@ async def _render_channel_list(store: Store) -> str:
     if not channels:
         return "No channels linked yet. Ask an admin to run /addyt."
     lines = [f"{emoji(EMOJI_LINKED)} <b>Linked channels</b>"]
-    for c in channels:
-        star = "⭐ " if c["is_default"] else ""
+    for n, c in enumerate(channels, start=1):
+        star = f"{emoji(EMOJI_STAR)} " if c["is_default"] else ""
         icon = STATUS_ICON.get(c["status"], "")
-        lines.append(f"{star}{icon} {esc(c['channel_title'])} — {c['uploads_count']} uploads")
+        row = f"{n}. {star}{b(c['channel_title'])} {emoji(EMOJI_SEP)} {b(c['uploads_count'])} uploads"
+        lines.append(f"{row} {icon}" if icon else row)
     return "\n".join(lines)
