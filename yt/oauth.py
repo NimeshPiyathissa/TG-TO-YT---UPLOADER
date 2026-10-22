@@ -28,10 +28,16 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+SCOPE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload"      # videos.insert (the upload itself)
+SCOPE_READONLY = "https://www.googleapis.com/auth/youtube.readonly"  # channels.list(mine), videos.list verification
+# videos.delete accepts only youtube / youtube.force-ssl / youtubepartner (NOT upload or readonly), so
+# deleting a video from the bot or the panel needs this narrower-than-`youtube` scope.
+SCOPE_DELETE = "https://www.googleapis.com/auth/youtube.force-ssl"
+SCOPE_FULL = "https://www.googleapis.com/auth/youtube"
+REQUIRED_SCOPES = (SCOPE_UPLOAD, SCOPE_READONLY)
 # openid + email are only used to record which Google account owns a channel (for grouping); they are
 # non-sensitive scopes and grant no extra YouTube access.
-SCOPES = ("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly "
-          "openid email")
+SCOPES = f"{SCOPE_UPLOAD} {SCOPE_READONLY} {SCOPE_DELETE} openid email"
 
 _HUMAN_ERRORS = {
     "redirect_uri_mismatch": "The redirect URI Google received doesn't match what's registered for this OAuth client.",
@@ -56,6 +62,51 @@ class TokenResponse:
     token_type: str
 
 
+def scope_gaps(granted: "str | list[str] | None") -> tuple[list[str], bool]:
+    """(required scopes that are missing, whether deleting videos is possible) for a grant.
+    Google's consent screen lets people untick individual permissions, so never assume."""
+    have = set(granted.split() if isinstance(granted, str) else (granted or []))
+    missing = [s for s in REQUIRED_SCOPES if s not in have]
+    return missing, bool(have & {SCOPE_DELETE, SCOPE_FULL})
+
+
+def can_delete(granted: "str | list[str] | None") -> bool:
+    return scope_gaps(granted)[1]
+
+
+def _mask(value: Optional[str], keep: int = 4) -> Optional[str]:
+    if not value:
+        return None
+    return value[:keep] + "…"
+
+
+def mask_email(email: Optional[str]) -> Optional[str]:
+    if not email or "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    return f"{local[:2]}***@{domain}"
+
+
+def describe_auth_url(url: str) -> dict:
+    """The parts of an authorization URL that matter for diagnosing a link, with secrets
+    (client id, state, PKCE challenge) redacted. This is what the link flow logs."""
+    from urllib.parse import parse_qs, urlparse
+
+    q = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
+    return {
+        "scopes": q.get("scope", "").split(),
+        "prompt": q.get("prompt"),
+        "access_type": q.get("access_type"),
+        "include_granted_scopes": q.get("include_granted_scopes"),  # None = not sent (Google's default: off)
+        "login_hint": mask_email(q.get("login_hint")),
+        "redirect_uri": q.get("redirect_uri"),
+        "client_id": _mask(q.get("client_id"), 8),
+        "response_type": q.get("response_type"),
+        "pkce": q.get("code_challenge_method"),
+        "state": "<redacted>" if q.get("state") else None,
+    }
+
+
 def generate_pkce_pair() -> tuple[str, str]:
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(40)).rstrip(b"=").decode("ascii")
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
@@ -71,6 +122,7 @@ def build_authorization_url(client_id: str, redirect_uri: str, state: str, code_
         "response_type": "code",
         "scope": SCOPES,
         "access_type": "offline",
+        "include_granted_scopes": "false",  # explicit: never fold in an earlier grant
         # select_account forces Google's account/channel chooser every time (consent alone lets it
         # silently reuse the last identity, which links the wrong Brand channel); consent keeps the
         # refresh token coming back.

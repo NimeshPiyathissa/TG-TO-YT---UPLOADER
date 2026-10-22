@@ -11,10 +11,15 @@ from web import auth
 from web.csrf import require_csrf
 from web.flash import flash, pop_flashes
 from yt.tokens import NeedsReauth, get_valid_access_token
+from yt.oauth import can_delete
 from yt.videos import delete_video
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
+
+
+class MissingDeleteScope(Exception):
+    """The channel was linked before the delete permission was requested."""
 
 
 @router.get("/videos")
@@ -46,9 +51,16 @@ async def delete_video_route(video_id: str, request: Request, confirm: str = For
         return RedirectResponse("/videos", status_code=303)
 
     user = auth.current_user(request)
+    channel = await store.get_yt_channel(video["channel_pk"]) if video["channel_pk"] else None
     try:
+        if channel is not None and not can_delete(channel["scopes"]):
+            raise MissingDeleteScope()
         access_token = await get_valid_access_token(store, video["channel_pk"])
         await delete_video(access_token, video_id)
+    except MissingDeleteScope:
+        flash(request, "This channel was linked before deleting was permitted, so YouTube would refuse it. Re-authorize "
+                        "the channel on the Channels page (leave every box ticked) and delete again. "
+                        "The record is still marked deleted here.", "error")
     except NeedsReauth:
         flash(request, "That channel needs to be re-authorised before this video can be deleted from YouTube. "
                         "The record is still marked deleted here.", "error")

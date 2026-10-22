@@ -14,6 +14,7 @@ from bot.downloader import cleanup_job_dir
 from bot.queue import JobQueue
 from db.store import Store
 from yt.tokens import NeedsReauth, get_valid_access_token
+from yt.oauth import can_delete
 from yt.videos import delete_video
 
 log = structlog.get_logger(__name__)
@@ -98,6 +99,12 @@ def register(app: pyrogram.Client, store: Store, queue: JobQueue) -> None:
             if not access.is_admin(role):
                 await cq.answer("Only the uploader or an admin can delete this.", show_alert=True)
                 return
+        channel = await store.get_yt_channel(row["channel_pk"]) if row["channel_pk"] else None
+        if channel is not None and not can_delete(channel["scopes"]):
+            # Linked before delete permission was requested: YouTube would answer 403, so say why.
+            await cq.answer("This channel needs to be re-authorised once (all permissions ticked) before "
+                            "videos can be deleted. An admin can do that on the web panel.", show_alert=True)
+            return
         try:
             token = await get_valid_access_token(store, row["channel_pk"])
         except NeedsReauth:

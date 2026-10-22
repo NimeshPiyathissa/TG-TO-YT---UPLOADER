@@ -27,6 +27,7 @@ from pathlib import Path
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",  # needed by videos.delete
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
@@ -65,8 +66,20 @@ def main() -> None:
         raise SystemExit(1)
 
     print("Opening your browser to sign in and approve access...")
+    print("  scopes:                 " + " ".join(SCOPES))
+    print("  prompt:                 select_account consent")
+    print("  access_type:            offline")
+    print("  include_granted_scopes: false (sent explicitly, so an earlier grant is never silently reused)")
+    print("Sign in with the Google account that OWNS the channel, then pick the channel in Google's chooser.")
     flow = InstalledAppFlow.from_client_secrets_file(str(path), scopes=SCOPES)
-    credentials = flow.run_local_server(port=0, prompt="select_account consent")
+    credentials = flow.run_local_server(
+        port=0, prompt="select_account consent", access_type="offline", include_granted_scopes="false",
+    )
+    granted = set(credentials.granted_scopes or credentials.scopes or [])
+    missing = [s for s in SCOPES[:2] if s not in granted]
+    if missing:
+        print("WARNING: Google did not grant: " + ", ".join(missing) +
+              ". Run this again and leave every permission ticked.", file=sys.stderr)
 
     out_path = Path.cwd() / "token.json"
     out_path.write_text(credentials.to_json(), encoding="utf-8")

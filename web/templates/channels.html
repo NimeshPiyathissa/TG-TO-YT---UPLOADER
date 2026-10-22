@@ -34,6 +34,9 @@
       <div><b>{{ (c.subscriber_count|thousands) if c.subscriber_count is not none else "—" }}</b><span title="Snapshot from the last time this channel was linked">Subscribers</span></div>
       <div><b>{{ c.last_used_at[:10] if c.last_used_at else "never" }}</b><span>Last used</span></div>
     </div>
+    {% if not delete_ok.get(c.id, true) %}
+    <p class="sub">Deleting videos from YouTube needs a newer permission: use Re-authorize and leave every box ticked.</p>
+    {% endif %}
     <div class="card-actions">
       {% if not c.is_default and c.status == "active" %}
       <form method="post" action="/channels/{{ c.id }}/set-default" class="inline-form">

@@ -146,6 +146,9 @@ There is no YouTube API call that lists or adds all of an account's Brand channe
 content partners only), so **every channel is linked separately**. The Channels page and the bot's picker group channels
 under the Google account (email) they belong to.
 
+0. **Google only offers the channels owned by the account you sign in with.** People merely invited via YouTube Studio
+   channel permissions "can't manage via YouTube APIs" (YouTube Help), so link each channel while signed in as the Google
+   account that owns it. If you come back with "No new channel was added", that account does not own the channel you wanted.
 1. Add every Google account you will link as a **test user** (Cloud Console -> OAuth consent screen -> Test users) while
    the consent screen is in Testing status. Note Google expires refresh tokens after 7 days for Testing projects.
 2. Make sure each channel is a Brand Account channel and your Google login is an Owner/Manager of it.

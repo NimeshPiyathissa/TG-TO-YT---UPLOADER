@@ -36,7 +36,7 @@ def fake_google(monkeypatch):
                         SimpleNamespace(encrypt=lambda s: s.encode(), decrypt=lambda b: b.decode()))
 
     async def fake_exchange(*a, **k):
-        return oauth.TokenResponse(access_token="at", refresh_token="rt", expires_in=3600, scope="s",
+        return oauth.TokenResponse(access_token="at", refresh_token="rt", expires_in=3600, scope=oauth.SCOPES,
                                    token_type="Bearer")
 
     async def fake_list(access_token):

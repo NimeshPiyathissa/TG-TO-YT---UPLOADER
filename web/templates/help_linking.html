@@ -16,6 +16,23 @@ the single channel you pick in Google's chooser, and the YouTube API has no call
 So a Google account with three channels needs three links, one per channel. The Channels page groups the results under the
 Google account they belong to, like YouTube's account switcher.</p>
 
+<h2>Which Google account can link which channel</h2>
+<p>Google can only offer the channels that belong to the account you sign in with. The Brand-channel chooser lists the
+channels that account <b>owns or manages as a Brand Account</b>. If the chooser never appears, or you come back with
+<i>No new channel was added</i>, the account you signed in with does not own the channel you wanted.</p>
+<p><b>Channels you were only invited to manage in YouTube Studio do not count.</b> YouTube's own help states that people
+invited through <i>channel permissions</i> "can't manage via YouTube APIs" and that invited users can't access "YouTube
+APIs", even though the owner can
+(<a href="https://support.google.com/youtube/answer/9481328" rel="noopener">YouTube Help: channel permissions</a>,
+<a href="https://support.google.com/youtube/answer/9367690" rel="noopener">migrating from Brand Account access</a>).
+So this app cannot be authorized for such a channel through a Google account that was merely invited. This is a limit of
+Google's API, not something the panel can work around.</p>
+<p>The supported way is therefore: <b>sign in with the Google account that owns the channel</b> (the Owner shown in YouTube
+Studio → Settings → Permissions, or the Brand Account's owner or manager in that account's Google settings), and link it
+from there. Link each channel under the Gmail that owns it; you do not need every Gmail to have access to every channel.
+Do not add extra Google Cloud projects or OAuth clients to get around this: it does not help, and it breaks YouTube's
+terms.</p>
+
 <h2>Before you add a Google account: add it as a test user</h2>
 <p>While your OAuth consent screen is in <b>Testing</b>, only listed test users can sign in. For <b>every</b> Google account
 you want to link, including accounts that only manage Brand channels:</p>
@@ -43,8 +60,11 @@ channels keep dropping.</p>
       want to add now.</li>
   <li><b>Google hasn't verified this app:</b> because this is your own private app you will see this warning. Choose
       <b>Advanced</b>, then <b>Go to … (unsafe)</b>. On the permissions screen leave <b>every box ticked</b>
-      (including the email one, which is how the channel is filed under its account) and press <b>Continue</b>.</li>
-  <li>The panel answers either <i>Linked new channel: …</i> or <i>… was already linked</i>, and names the Google account.</li>
+      (the email one files the channel under its account, and the YouTube management one is what allows deleting videos)
+      and press <b>Continue</b>. If a required permission is unticked the link is refused and you are asked to try again.</li>
+  <li>The panel answers either <i>Linked new channel: …</i> or <i>No new channel was added: Google returned … which was
+      already linked</i>, and names the Google account. The second answer means Google offered no other channel for the
+      account you signed in with (see "Which Google account can link which channel" above).</li>
   <li>Repeat for every other channel, choosing a different one in the chooser each time.</li>
 </ol>
 <p>New channels appear in the Telegram bot immediately; nothing needs a restart. The first channel you link becomes

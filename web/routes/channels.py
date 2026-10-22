@@ -18,9 +18,9 @@ from web.csrf import require_csrf
 from web.flash import flash, pop_flashes
 from yt.credentials import (InvalidCredentialFile, OfflineToken, ServiceAccountRejected,
                              parse_client_secret, parse_token_json)
-from yt.oauth import (LoopbackCallbackServer, OAuthError, build_authorization_url,
+from yt.oauth import (LoopbackCallbackServer, OAuthError, build_authorization_url, can_delete, describe_auth_url,
                        exchange_code, fetch_account_email, generate_pkce_pair, refresh_access_token,
-                       revoke_token)
+                       mask_email, revoke_token, scope_gaps)
 from yt.quota import BUCKET_LIMITS, remaining
 from yt.videos import list_my_channels
 
@@ -45,6 +45,15 @@ async def finalize_channel_from_code(store, code: str, state_row, redirect_uri: 
     client_secret = crypto.decrypt(client_row["client_secret_enc"])
     code_verifier = crypto.decrypt(state_row["code_verifier_enc"])
     tok = await exchange_code(client_id, client_secret, code, code_verifier, redirect_uri)
+    missing, delete_ok = scope_gaps(tok.scope)
+    log.info("oauth.callback_token", granted_scopes=tok.scope.split(), missing_required_scopes=missing,
+             delete_scope_granted=delete_ok, has_refresh_token=bool(tok.refresh_token))
+    if missing:
+        # Google's consent screen lets people untick permissions; without these the channel can't work.
+        raise RuntimeError(
+            "Google didn't grant every permission this app needs (missing: "
+            + ", ".join(m.rsplit("/", 1)[-1] for m in missing)
+            + "). On Google's permissions screen leave every box ticked, then link again.")
     if not tok.refresh_token:
         raise RuntimeError(
             "Google didn't return a refresh token. This usually means the account already "
@@ -52,6 +61,8 @@ async def finalize_channel_from_code(store, code: str, state_row, redirect_uri: 
             "https://myaccount.google.com/permissions and linking again."
         )
     channels = await list_my_channels(tok.access_token)
+    log.info("oauth.channels_returned", count=len(channels),
+             channels=[{"id": c["channel_id"], "title": c["title"]} for c in channels])
     if not channels:
         raise RuntimeError("That Google account has no YouTube channel to link.")
     ch = channels[0]
@@ -63,21 +74,31 @@ async def finalize_channel_from_code(store, code: str, state_row, redirect_uri: 
         crypto.encrypt(tok.refresh_token), crypto.encrypt(tok.access_token), expires_at,
         tok.scope, state_row["created_by"], google_email=email, subscriber_count=ch.get("subscriber_count"),
     )
-    return {"channel_pk": channel_pk, "channel_title": ch["title"], "already_linked": existed, "email": email}
+    log.info("oauth.channel_saved", channel_pk=channel_pk, saved_channel_id=ch["channel_id"],
+             channel_title=ch["title"], already_linked=existed, google_email=mask_email(email),
+             can_delete=can_delete(tok.scope))
+    return {"channel_pk": channel_pk, "channel_title": ch["title"], "already_linked": existed, "email": email,
+            "can_delete": can_delete(tok.scope)}
 
 
 def link_result_message(channel: dict) -> str:
     """One wording for every linking path: say whether this created a channel or refreshed one,
     and under which Google account it now sits."""
     if channel.get("already_linked"):
-        msg = (f"{channel['channel_title']} was already linked, so its connection was refreshed instead of "
-               "adding a duplicate. To add a different channel, pick it in Google's chooser.")
+        msg = (f"No new channel was added: Google returned {channel['channel_title']}, which was already linked, so its "
+               "connection was refreshed. Google only offers the channels owned by the account you sign in with "
+               "(not ones you were merely invited to manage in YouTube Studio). To add a different channel, sign in "
+               "with the Google account that owns it. See Linking more channels.")
     else:
         msg = f"Linked new channel: {channel['channel_title']}"
     if channel.get("email"):
-        return f"{msg} (Google account: {channel['email']})"
-    return (f"{msg} Google didn't share the account email, so it is listed under 'Account not recorded'. "
-            "Link it again and leave the email permission ticked to group it under its account.")
+        msg = f"{msg} (Google account: {channel['email']})"
+    else:
+        msg += (" Google didn't share the account email, so it is listed under 'Account not recorded'. "
+                "Link it again and leave the email permission ticked to group it under its account.")
+    if channel.get("can_delete") is False:
+        msg += " Deleting videos from YouTube won't work for this channel until it is re-authorized with every permission ticked."
+    return msg
 
 
 async def _run_loopback_link(store, state: str) -> None:
@@ -117,6 +138,7 @@ async def channels_list(request: Request):
     return templates.TemplateResponse(request, "channels.html", {
         "channels": channels, "groups": flow.group_by_account(channels, default_group_first=False),
         "unrecorded_label": flow.UNRECORDED_ACCOUNT, "oauth_mode": settings.oauth_mode,
+        "delete_ok": {c["id"]: can_delete(c["scopes"]) for c in channels},
         "status_label": STATUS_LABEL, "flashes": pop_flashes(request),
         "general_used": quota.get("general", 0), "general_limit": BUCKET_LIMITS["general"],
         "uploads_remaining": await remaining(store, "uploads"), "uploads_limit": BUCKET_LIMITS["uploads"],
@@ -195,6 +217,7 @@ async def _begin_hostname_link(request: Request, login_hint: Optional[str]):
     state = await store.create_oauth_state(user["username"] if user else "unknown", "hostname", crypto.encrypt(verifier))
     url = build_authorization_url(client_row["client_id"], settings.redirect_uri, state, challenge,
                                   login_hint=login_hint)
+    log.info("oauth.auth_request", mode="hostname", **describe_auth_url(url))
     return RedirectResponse(url, status_code=303)
 
 
@@ -215,6 +238,7 @@ async def _begin_loopback_link(request: Request, login_hint: Optional[str]):
     state = await store.create_oauth_state(user["username"] if user else "unknown", "loopback", crypto.encrypt(verifier))
     auth_url = build_authorization_url(client_row["client_id"], settings.redirect_uri, state, challenge,
                                        login_hint=login_hint)
+    log.info("oauth.auth_request", mode="loopback", **describe_auth_url(auth_url))
     _loopback_sessions[state] = {"status": "pending"}
     asyncio.create_task(_run_loopback_link(store, state))
     return templates.TemplateResponse(request, "channels_loopback.html", {
@@ -293,7 +317,8 @@ async def upload_token(request: Request, file: UploadFile = File(...), csrf_ok: 
         subscriber_count=ch.get("subscriber_count"),
     )
     await store.write_audit("app_user", user["username"] if user else None, "channel_linked", target=ch["title"])
-    flash(request, link_result_message({"channel_title": ch["title"], "already_linked": existed, "email": email}),
+    flash(request, link_result_message({"channel_title": ch["title"], "already_linked": existed, "email": email,
+                                         "can_delete": can_delete(scopes)}),
           "info" if existed else "success")
     return RedirectResponse("/channels", status_code=303)
 

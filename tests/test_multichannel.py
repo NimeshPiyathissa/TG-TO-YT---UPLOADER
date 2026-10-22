@@ -36,7 +36,7 @@ def fake_google(monkeypatch, store):
 
     async def fake_exchange(client_id, client_secret, code, verifier, redirect_uri):
         return oauth.TokenResponse(access_token=f"at-{code}", refresh_token=f"rt-{code}", expires_in=3600,
-                                   scope="s", token_type="Bearer")
+                                   scope=oauth.SCOPES, token_type="Bearer")
 
     async def fake_list(access_token):
         cid, title = chosen["channel"]
